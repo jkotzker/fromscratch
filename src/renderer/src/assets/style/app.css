@@ -1,0 +1,541 @@
+@charset "UTF-8";
+
+/*
+ * Colours are the original Solarized-ish Sass palette with the lighten()/darken()/transparentize()
+ * results precomputed, so the app needs no CSS preprocessor.
+ */
+:root {
+  --bg: #002b36;
+  --bg-1: #002e3b;
+  --bg-3: #003645;
+  --bg-4: #003a4a;
+  --bg-5: #003e4f;
+  --bg-8: #004a5f;
+  --bg-10: #005269;
+  --bg-20: #00799c;
+  --bg-translucent: rgba(0, 43, 54, 0.35);
+  --bg-solid-ish: rgba(0, 43, 54, 0.95);
+  --bg-transparent: rgba(0, 43, 54, 0);
+  --bg-1-translucent: rgba(0, 46, 59, 0.5);
+  --bg-4-translucent: rgba(0, 58, 74, 0.5);
+  --bg-5-translucent: rgba(0, 62, 80, 0.5);
+  --text: #829696;
+  --text-dark-5: #748a8a;
+  --text-light-15: #acb9b9;
+  --text-light-20: #b9c5c5;
+  --text-transparent: rgba(130, 150, 150, 0);
+  --panel-bg: rgb(25, 64, 74);
+  --overlay-bg: rgba(255, 255, 255, 0.1);
+  --overlay-bg-hover: rgba(255, 255, 255, 0.15);
+  --overlay-text: rgba(255, 255, 255, 0.4);
+  --overlay-text-hover: rgba(255, 255, 255, 0.7);
+}
+
+@font-face {
+  font-family: 'FiraCode';
+  src: url(../font/FiraCode-Regular.otf) format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'FiraCode-Retina';
+  src: url(../font/FiraCode-Retina.otf) format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+html {
+  box-sizing: border-box;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  height: 100%;
+  min-height: 100%;
+  font-family: 'FiraCode';
+  overflow: hidden;
+  font-size: 100%;
+  line-height: 1.25;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0;
+  margin: 0;
+  -webkit-overflow-scrolling: touch;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body[data-platform='darwin'] {
+  background: transparent;
+  font-family: 'FiraCode-Retina';
+}
+
+#root {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+[data-platform='darwin'] #root {
+  background: transparent;
+}
+
+.app {
+  height: 100%;
+  transition: 0.4s ease filter;
+}
+
+.editor {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+[data-platform='darwin'] .editor {
+  background: var(--bg-translucent);
+}
+
+/* Top and bottom fades over the text. */
+.editor::before,
+.editor::after {
+  pointer-events: none;
+  position: absolute;
+  z-index: 4;
+  display: block;
+  content: ' ';
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 54px;
+  background: linear-gradient(to top, var(--bg-transparent), var(--bg) 5%);
+}
+
+.editor::after {
+  top: auto;
+  bottom: 0;
+  height: 3rem;
+  background: linear-gradient(to bottom, var(--bg-transparent), var(--bg) 5%);
+}
+
+[data-platform='darwin'] .editor::before,
+[data-platform='darwin'] .editor::after {
+  background: transparent;
+}
+
+/* --- CodeMirror 6 ------------------------------------------------------- */
+
+.cm-editor {
+  position: relative;
+  height: 100%;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+.cm-editor .cm-scroller {
+  font-family: inherit;
+  line-height: inherit;
+  overflow-x: hidden;
+}
+
+.cm-editor .cm-content {
+  padding: 3rem 0 4rem;
+  caret-color: var(--text-dark-5);
+  /* CodeMirror's base theme switches ligatures off; Fira Code's arrows need them back on. */
+  font-variant-ligatures: contextual;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.cm-editor .cm-line {
+  padding-left: 0;
+  padding-right: 5vw;
+}
+
+.cm-editor .cm-cursor,
+.cm-editor .cm-dropCursor {
+  border-left: 1px solid var(--text-dark-5);
+}
+
+.cm-editor .cm-selectionBackground,
+.cm-editor .cm-content ::selection {
+  background: var(--bg-5);
+}
+
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--bg-5);
+}
+
+.cm-editor .cm-activeLine {
+  background: linear-gradient(90deg, var(--bg) 0%, var(--bg-1) 4%, var(--bg-1) 60%, var(--bg) 100%);
+}
+
+.cm-editor .cm-searchMatch {
+  background: var(--bg-4);
+  outline: 2px solid var(--bg-4);
+  color: var(--text-light-20);
+}
+
+.cm-editor .cm-searchMatch-selected {
+  background: var(--bg-20);
+}
+
+.cm-editor .cm-selectionMatch {
+  background: var(--bg-3);
+}
+
+[data-platform='darwin'] .cm-editor .cm-selectionBackground,
+[data-platform='darwin'] .cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--bg-5-translucent);
+}
+
+[data-platform='darwin'] .cm-editor .cm-activeLine {
+  background: linear-gradient(
+    90deg,
+    var(--text-transparent) 0%,
+    var(--bg-1-translucent) 4%,
+    var(--bg-1-translucent) 60%,
+    var(--bg-transparent) 100%
+  );
+}
+
+[data-platform='darwin'] .cm-editor .cm-searchMatch {
+  background: var(--bg-4-translucent);
+  outline-color: var(--bg-4-translucent);
+}
+
+/* Fold gutter: sits just left of the text, invisible until hovered or folded. */
+.cm-editor .cm-gutters {
+  margin-left: calc(5vw - 1.4em);
+  /* Fixed width so the text always starts at 5vw, with the fold marker just left of it. */
+  min-width: 1.4em;
+  justify-content: flex-end;
+  background: transparent;
+  border: 0;
+  color: var(--bg-10);
+  pointer-events: none;
+}
+
+.cm-editor .cm-gutterElement {
+  pointer-events: auto;
+}
+
+.fold-marker {
+  display: inline-block;
+  cursor: pointer;
+  opacity: 0;
+  transition: 0.3s ease opacity;
+}
+
+.fold-marker.closed,
+.cm-editor .cm-gutters:hover .fold-marker,
+.cm-editor .cm-scroller:hover .fold-marker {
+  opacity: 1;
+}
+
+.cm-editor .cm-foldPlaceholder {
+  color: var(--bg-20);
+  background: var(--bg-3);
+  border: 0;
+  border-radius: 0.25em;
+  margin: 0 0.3125em;
+  padding: 0 0.2em;
+}
+
+/* Search panel, replacing the old CodeMirror dialog. */
+.cm-editor .cm-panels {
+  z-index: 6;
+  background: var(--panel-bg);
+  color: var(--overlay-text);
+  border: 0;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.cm-editor .cm-panels.cm-panels-top {
+  border-bottom: 0;
+}
+
+/* The goto-line dialog is a bottom panel by default; this app has always shown it up top. */
+.cm-editor .cm-panels.cm-panels-bottom {
+  position: absolute;
+  top: 0;
+  bottom: auto;
+  width: 100%;
+  border-top: 0;
+}
+
+/* cm-search is the find/replace panel, cm-dialog the goto-line prompt. */
+.cm-editor .cm-panel.cm-search,
+.cm-editor .cm-panel.cm-dialog {
+  padding: 0.5rem calc(5vw - 1.4em);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+[data-platform='darwin'] .cm-editor .cm-panel.cm-search,
+[data-platform='darwin'] .cm-editor .cm-panel.cm-dialog {
+  padding-top: 1.75rem;
+}
+
+.cm-editor .cm-panels label {
+  font-size: 0.8em;
+}
+
+.cm-editor .cm-panels input[type='text'],
+.cm-editor .cm-textfield {
+  border: 0;
+  outline: none;
+  background: var(--overlay-bg);
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0.15rem 0.4rem;
+  min-width: 12rem;
+}
+
+.cm-editor .cm-panels button,
+.cm-editor .cm-button {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  background-image: none;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0 5px;
+  color: var(--text-dark-5);
+  cursor: default;
+}
+
+.cm-editor .cm-panels button:hover,
+.cm-editor .cm-panels button:focus,
+.cm-editor .cm-panels button:active {
+  color: var(--text-light-15);
+  outline: 0;
+}
+
+.cm-editor .cm-panels button[name='close'],
+.cm-editor .cm-dialog-close {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.5rem;
+  font-size: 1.2em;
+}
+
+.cm-editor .cm-tooltip {
+  background: var(--panel-bg);
+  border: 0;
+  color: var(--overlay-text);
+}
+
+/* Scrollbar, replacing the simplescrollbars addon. */
+.cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--bg-4);
+  transition: 0.3s ease background;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: var(--bg-8);
+}
+
+/* --- App chrome --------------------------------------------------------- */
+
+.nosave {
+  z-index: 4;
+  background: var(--overlay-bg);
+  color: var(--overlay-text);
+  line-height: 2rem;
+  border-radius: 0.5rem;
+  padding: 0 0.5rem;
+  position: fixed;
+  left: 50%;
+  margin-left: -97px;
+  transition: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) all;
+  bottom: -4em;
+}
+
+.nosave.active {
+  bottom: 0.5rem;
+}
+
+[data-platform='darwin'] .titlebar {
+  z-index: 10;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 1.3rem;
+  -webkit-app-region: drag;
+}
+
+.updater {
+  z-index: 5;
+  display: block;
+  background: var(--overlay-bg);
+  color: var(--overlay-text);
+  width: 100%;
+  text-align: center;
+  line-height: 2rem;
+  position: fixed;
+  transition: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) all;
+  top: -4rem;
+  text-decoration: none;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1rem 2.5rem 0 0.5rem;
+}
+
+.updater.active {
+  top: -1rem;
+}
+
+.updater:hover,
+.updater:focus {
+  background: var(--overlay-bg-hover);
+  color: var(--overlay-text-hover);
+}
+
+.updater span {
+  line-height: 1.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: block;
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.25rem;
+  border-radius: 1.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.5rem;
+  vertical-align: middle;
+}
+
+.updater span:hover,
+.updater span:focus {
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--overlay-text-hover);
+}
+
+[data-platform='darwin'] .updater {
+  padding-top: 2rem;
+}
+
+.shortcuts {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+  background: var(--bg-solid-ish);
+  padding: 1rem 1rem 0;
+  color: var(--text);
+  z-index: 99;
+  box-shadow: 0 0 3rem 3rem rgba(0, 0, 0, 0.3);
+  overflow: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.3s ease opacity;
+  border-radius: 4px;
+}
+
+.shortcuts.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.shortcuts h3 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+}
+
+.shortcuts button {
+  line-height: 1.6rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: block;
+  position: fixed;
+  right: 2.5rem;
+  top: 2.5rem;
+  border-radius: 1.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1rem;
+  vertical-align: middle;
+  border: 0;
+  outline: none;
+  transition: 0.15s ease all;
+}
+
+.shortcuts button span {
+  position: relative;
+  display: block;
+  transform: translateY(-1px);
+}
+
+.shortcuts button:hover,
+.shortcuts button:focus {
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--overlay-text-hover);
+}
+
+.shortcuts li {
+  list-style: none;
+  line-height: 1.5;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.shortcuts li > span:first-child {
+  width: 11rem;
+  flex: none;
+}
+
+.shortcuts li > span:last-child {
+  flex: 1;
+}
+
+.shortcuts li,
+.shortcuts kbd {
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.shortcuts kbd {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 4px;
+  border-radius: 2px;
+}

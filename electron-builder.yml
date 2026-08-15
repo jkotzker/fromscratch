@@ -1,0 +1,50 @@
+appId: com.buzkall.fromscratch
+productName: FromScratch
+copyright: MIT, Kilian Valkhof
+
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  darkModeSupport: true
+  # Local, unsigned builds: apps built on this machine are not quarantined, so Gatekeeper
+  # lets them run. If a build ever gets flagged (e.g. after being downloaded), run:
+  #   xattr -dr com.apple.quarantine /Applications/FromScratch.app
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+
+dmg:
+  icon: resources/icon.icns
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Untested from this machine, kept for completeness.
+win:
+  icon: resources/icon.ico
+  target:
+    - nsis
+
+linux:
+  icon: resources/icon.png
+  category: Utility
+  target:
+    - deb
+    - AppImage
