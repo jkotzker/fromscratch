@@ -71,6 +71,11 @@ export function buildMenu({
       accelerator: 'F1',
       click: () => dispatch('toggle-shortcuts'),
     },
+    {
+      label: 'Font…',
+      accelerator: 'CmdOrCtrl+T',
+      click: () => dispatch('toggle-font-picker'),
+    },
   ];
 
   const openWebsite = () => shell.openExternal('https://fromscratch.rocks');

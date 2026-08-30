@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Editor from './components/Editor';
+import FontPicker from './components/FontPicker';
 import Shortcuts from './components/Shortcuts';
+import { fontStack, listFontFamilies } from './fonts';
 
 const { api } = window;
 
@@ -17,10 +19,13 @@ const clampFontSize = size => Math.min(Math.max(Math.round(size), 8), 72);
 export default function App() {
   const [initial, setInitial] = useState(null);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
+  const [fontFamily, setFontFamily] = useState(null);
+  const [families, setFamilies] = useState([]);
   const [scheme, setScheme] = useState(null);
   const [saveHintVisible, setSaveHintVisible] = useState(false);
   const [updateVersion, setUpdateVersion] = useState(null);
   const [shortcutsVisible, setShortcutsVisible] = useState(false);
+  const [fontPickerVisible, setFontPickerVisible] = useState(false);
 
   const editor = useRef(null);
   const saveHintTimer = useRef(null);
@@ -36,6 +41,7 @@ export default function App() {
       document.body.dataset.platform = platform;
       schemes.current = available || [];
       setFontSize(clampFontSize(settings.font?.size || DEFAULT_FONT_SIZE));
+      setFontFamily(settings.font?.family || null);
       setScheme(active);
       setInitial({
         content: content === null ? DEFAULT_CONTENT : content,
@@ -50,8 +56,27 @@ export default function App() {
 
   // Persist whatever changed, but only once the stored values have been loaded.
   useEffect(() => {
-    if (initial) api.setSetting('font', { family: null, size: fontSize });
-  }, [initial, fontSize]);
+    if (initial) api.setSetting('font', { family: fontFamily, size: fontSize });
+  }, [initial, fontFamily, fontSize]);
+
+  // Only set the property for a custom choice; leaving it unset lets each platform keep its own
+  // bundled default from the stylesheet.
+  useEffect(() => {
+    const stack = fontStack(fontFamily);
+    if (stack) document.documentElement.style.setProperty('--font-family', stack);
+    else document.documentElement.style.removeProperty('--font-family');
+  }, [fontFamily]);
+
+  // Enumerating is a one-off; the list is only needed once the picker opens.
+  useEffect(() => {
+    let cancelled = false;
+    listFontFamilies().then(list => {
+      if (!cancelled) setFamilies(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // The whole stylesheet reads its colours from custom properties, so applying a scheme is just
   // setting them on the root element -- no CSS rules change.
@@ -96,6 +121,9 @@ export default function App() {
           break;
         case 'toggle-shortcuts':
           setShortcutsVisible(visible => !visible);
+          break;
+        case 'toggle-font-picker':
+          setFontPickerVisible(visible => !visible);
           break;
         case 'undo':
           editor.current?.undo();
@@ -179,6 +207,17 @@ export default function App() {
       <div className="titlebar" />
 
       <Shortcuts visible={shortcutsVisible} platform={api.platform} onClose={() => setShortcutsVisible(false)} />
+
+      <FontPicker
+        key={fontPickerVisible ? 'open' : 'closed'}
+        visible={fontPickerVisible}
+        families={families}
+        family={fontFamily}
+        size={fontSize}
+        onChangeFamily={setFontFamily}
+        onChangeSize={setFontSize}
+        onClose={() => setFontPickerVisible(false)}
+      />
     </div>
   );
 }

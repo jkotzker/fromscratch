@@ -66,7 +66,9 @@ html {
 body {
   height: 100%;
   min-height: 100%;
-  font-family: 'FiraCode';
+  /* --font-family is set on the root element only when a custom font is chosen, so each platform
+     keeps its own bundled default otherwise (darwin uses the heavier Retina cut). */
+  font-family: var(--font-family, 'FiraCode');
   overflow: hidden;
   font-size: 100%;
   line-height: 1.25;
@@ -81,7 +83,7 @@ body {
 
 body[data-platform='darwin'] {
   background: transparent;
-  font-family: 'FiraCode-Retina';
+  font-family: var(--font-family, 'FiraCode-Retina');
 }
 
 #root {
@@ -564,4 +566,142 @@ body[data-platform='darwin'] {
   background: rgba(0, 0, 0, 0.5);
   padding: 2px 4px;
   border-radius: 2px;
+}
+
+/* Font picker: same panel treatment as the shortcuts overlay, themed by the active scheme. */
+.fontpicker {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+  background: var(--bg-solid-ish);
+  padding: 1rem 1rem 0;
+  color: var(--text);
+  z-index: 99;
+  box-shadow: 0 0 3rem 3rem rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.3s ease opacity;
+  border-radius: 4px;
+}
+
+.fontpicker.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.fontpicker h3 {
+  font-size: 1.2em;
+  margin-bottom: 0.5rem;
+}
+
+.fontpicker > button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  border: 0;
+  background: var(--overlay-bg);
+  color: var(--overlay-text);
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: default;
+  padding: 0 0.5rem;
+}
+
+.fontpicker > button:hover {
+  background: var(--overlay-bg-hover);
+  color: var(--overlay-text-hover);
+}
+
+.fontpicker-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.fontpicker-controls input[type='text'] {
+  flex: 1 1 12rem;
+}
+
+.fontpicker-controls input[type='text'],
+.fontpicker-controls input[type='number'] {
+  border: 0;
+  outline: none;
+  background: var(--overlay-bg);
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0.2rem 0.4rem;
+}
+
+.fontpicker-controls input[type='number'] {
+  width: 4rem;
+  margin: 0 0.25rem;
+}
+
+.fontpicker-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.fontpicker-list {
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+  margin: 0 -0.5rem;
+  padding: 0 0.5rem 1rem;
+}
+
+.fontpicker-list button {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  cursor: default;
+}
+
+.fontpicker-list button:hover {
+  background: var(--overlay-bg);
+}
+
+.fontpicker-list button.current {
+  background: var(--selection);
+  color: var(--selected-text);
+}
+
+.fontpicker-name {
+  flex: 0 0 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fontpicker-sample {
+  color: var(--text-dark-5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fontpicker-list button.current .fontpicker-sample {
+  color: inherit;
+}
+
+.fontpicker-empty {
+  padding: 0.5rem;
+  color: var(--text-dark-5);
 }
