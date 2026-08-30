@@ -3,6 +3,11 @@
 The app icon is generated from these files, not hand-drawn. Run `./build-icns.sh`
 to rebuild `../icon.icns` and `../icon.png`.
 
+The artwork was designed with LLM assistance (Claude) — the stroke geometry, the
+colour treatment, and the measurement of Apple's icon grid described below. It
+deliberately keeps the original icon's idea, scribbled lines and a text caret,
+rather than inventing a new mark.
+
 Requires `rsvg-convert` (`brew install librsvg`). `iconutil` and `python3` ship
 with macOS.
 

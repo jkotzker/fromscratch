@@ -4,7 +4,7 @@ import Shortcuts from './components/Shortcuts';
 
 const { api } = window;
 
-const RELEASES_URL = 'https://github.com/buzkall/fromscratch/releases';
+const RELEASES_URL = 'https://github.com/jkotzker/fromscratch/releases';
 
 const LIGHT_THEME_FILTER = 'invert(100%) hue-rotate(20deg) brightness(1.1) contrast(1.4) grayscale(20%)';
 

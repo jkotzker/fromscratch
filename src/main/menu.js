@@ -1,6 +1,6 @@
 import { Menu, shell } from 'electron';
 
-const REPO_URL = 'https://github.com/buzkall/fromscratch';
+const REPO_URL = 'https://github.com/jkotzker/fromscratch';
 
 // Accelerators live on the menu (and, for editor commands, in the CodeMirror keymap). The app
 // used to grab Esc, F1, F11 and Cmd+W/Q/R with globalShortcut, which registers them OS-wide.

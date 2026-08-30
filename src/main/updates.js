@@ -1,7 +1,7 @@
 import { net } from 'electron';
 import { compareVersions } from 'compare-versions';
 
-const RELEASES_API = 'https://api.github.com/repos/buzkall/fromscratch/releases/latest';
+const RELEASES_API = 'https://api.github.com/repos/jkotzker/fromscratch/releases/latest';
 
 /**
  * Returns the newest release tag when it is newer than `currentVersion`, otherwise null.

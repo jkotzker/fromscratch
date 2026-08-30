@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/buzkall/fromscratch/"
+    "url": "https://github.com/jkotzker/fromscratch/"
   },
   "author": {
     "name": "Kilian Valkhof",
@@ -23,7 +23,7 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/buzkall/fromscratch/issues"
+    "url": "https://github.com/jkotzker/fromscratch/issues"
   },
   "keywords": [
     "electron",
@@ -31,7 +31,7 @@
     "scratchpad",
     "codemirror"
   ],
-  "homepage": "https://github.com/buzkall/fromscratch",
+  "homepage": "https://github.com/jkotzker/fromscratch",
   "engines": {
     "node": ">=20.19"
   },

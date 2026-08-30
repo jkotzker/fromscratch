@@ -18,8 +18,11 @@ FromScratch is a little app that you can use as a quick note taking or todo app.
 * Portable mode support
 * Free
 
-> This is a fork of [Kilian/fromscratch](https://github.com/Kilian/fromscratch), kept building and
-> running on current macOS. See [Fork notes](#fork-notes) for what changed.
+> This is a fork of [buzkall/fromscratch](https://github.com/buzkall/fromscratch), which is itself a
+> fork of the original [Kilian/fromscratch](https://github.com/Kilian/fromscratch) by
+> [Kilian Valkhof](https://kilianvalkhof.com). buzkall did the work of getting the app building and
+> running on current macOS; this fork adds an Apple Silicon build pipeline and a new app icon.
+> See [Fork notes](#fork-notes) for what changed at each step.
 
 ### Shortcuts
 
@@ -45,7 +48,7 @@ FromScratch is a little app that you can use as a quick note taking or todo app.
 
 ## Development
 
-Requires Node 20.19+ (see `.nvmrc`).
+`package.json` allows Node 20.19+. `.nvmrc` pins **24**, which is what CI builds against.
 
 ```sh
 # Install dependencies
@@ -78,8 +81,10 @@ cp -R release/mac-arm64/FromScratch.app /Applications/
 ```
 
 Quit the app first, and don't run it alongside `npm run dev` — both write the same
-`~/.fromscratch/content.txt`. If the upstream Homebrew cask is still installed, remove it first, or
-the two bundles collide on the same file name:
+`~/.fromscratch/content.txt`.
+
+The `fromscratch` Homebrew cask no longer exists, but if you installed it years ago the old bundle
+may still be around and will collide with this one on the same file name. Remove it if so:
 
 ```sh
 brew uninstall --cask fromscratch
@@ -92,8 +97,12 @@ quarantined (for instance after being downloaded), clear it with:
 xattr -dr com.apple.quarantine /Applications/FromScratch.app
 ```
 
-Signing and notarizing would need an Apple Developer account, `mac.identity` in
-`electron-builder.yml`, and an `@electron/notarize` afterSign hook.
+Signing and notarizing would need a paid Apple Developer Program membership ($99/year) for a
+Developer ID Application certificate — a free Apple ID gets a Personal Team, which cannot issue one
+and cannot notarize. On the build side electron-builder 26 handles it natively: set `mac.identity`,
+`mac.hardenedRuntime` and `mac.notarize` in `electron-builder.yml`. No `@electron/notarize`
+afterSign hook is needed any more. Electron additionally needs the `com.apple.security.cs.allow-jit`
+and `allow-unsigned-executable-memory` entitlements to launch under the hardened runtime.
 
 ### Command Line Arguments
 **Portable Mode**
@@ -133,9 +142,11 @@ Yes! See the **portable mode** section under the **Command Line Arguments** head
 
 ## Fork notes
 
-The upstream project stopped at Electron 4 / webpack 4 / Babel 6 / node-sass, which no longer
-installs or builds on current Node and macOS. This fork keeps the app and its data format
-identical while replacing everything underneath:
+### Modernisation, by [buzkall](https://github.com/buzkall/fromscratch)
+
+The original project stopped at Electron 4 / webpack 4 / Babel 6 / node-sass, which no longer
+installs or builds on current Node and macOS. buzkall kept the app and its data format identical
+while replacing everything underneath, and that work is inherited wholesale here:
 
 * **electron-vite + Vite** instead of webpack, Babel and the DLL build
 * **Electron 43**, built for Apple Silicon, with `contextIsolation`, `sandbox` and a preload
@@ -149,13 +160,34 @@ identical while replacing everything underneath:
 * Shortcuts come from the menu and the editor keymap instead of OS-wide `globalShortcut`
   registrations
 * Content is written to disk debounced instead of on every keystroke
-* The update check looks at this fork's GitHub releases
-* **New app icon** on the macOS squircle grid. The original was a sharp-cornered square with
-  window dots floating outside it, which macOS 26 would shrink onto a grey squircle background.
-  Sources and the regeneration script are in [`resources/icon-src`](resources/icon-src)
+* The update check looks at a fork's GitHub releases rather than the original's
 
 The on-disk format is unchanged: `~/.fromscratch/content.txt` plus the settings files next to it.
 Folds are stored under a new `folds2` key, so the old `folds` file is simply ignored.
+
+### Changes in this fork
+
+* **New app icon** on the macOS squircle grid. The previous icon was a sharp-cornered square with
+  window dots floating outside it — a shape macOS 26 shrinks onto a grey squircle background rather
+  than displaying as-is. The replacement keeps the same idea (scribbled lines and a text caret) on
+  the 824×824-at-100,100 grid Apple's own icons use
+* The icon is **rendered from SVG**, not drawn by hand in a bitmap editor. `resources/icon-src`
+  holds a generator script and the vector sources; `./build-icns.sh` regenerates `icon.icns` and
+  `icon.png` reproducibly. The artwork was **designed with LLM assistance** (Claude), including the
+  stroke geometry and the measurement of Apple's icon grid — see
+  [`resources/icon-src/README.md`](resources/icon-src/README.md) for how the geometry was derived
+* Layered SVGs are included for **Icon Composer**, so the Liquid Glass `.icon` for macOS 26 can be
+  assembled without redrawing anything. That step needs Tahoe 26.4 and Xcode 26, so only the
+  `.icns` is built here
+* **GitHub Actions workflow** building and linting on every push, and publishing an arm64 `.dmg` to
+  a GitHub release on `v*` tags
+* App id is `com.jkotzker.fromscratch`, and the repository, issue, release and update-check URLs
+  point at this fork
+
+Releases are **unsigned** — there is no paid Apple Developer account behind this fork. A dmg you
+download will be quarantined, and macOS Sequoia and later removed the Control-click shortcut for
+that, so it has to be allowed under System Settings → Privacy & Security. Building locally avoids
+the problem entirely, since an app you build yourself is never quarantined.
 
 ### Credits
 
@@ -169,3 +201,8 @@ FromScratch is built upon these open source projects:
 Original app by [@kilianvalkhof](https://kilianvalkhof.com). Thanks to @bittersweet for helping set
 up IPC to work around a particularly nasty bug, @chentsulin for the electron-react-boilerplate, and
 @ctrauma for the portable bits.
+
+The port to a current toolchain — electron-vite, Electron 43, React 19 and CodeMirror 6 — is
+[@buzkall](https://github.com/buzkall)'s work, and this fork is built directly on top of it.
+
+MIT licensed throughout, as the original is.
