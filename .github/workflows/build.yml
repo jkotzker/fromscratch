@@ -1,0 +1,95 @@
+name: build
+
+# macOS runners are free and unmetered on public repositories, so this builds on
+# every push and pull request rather than only on tags.
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only by default. Only the release job widens this, so a pull request
+# build never runs with a token that can write to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # macos-26 is Apple Silicon; the x86_64 macOS images are being retired in
+    # 2027. An arm64 runner also means the build is native rather than emulated.
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # electron-builder downloads its own copy of Electron, so the lazy
+      # download that `require('electron')` would trigger is not needed here.
+      # Electron 43 ships no postinstall script, so `npm ci` alone never
+      # populates node_modules/electron/dist -- that only matters for `npm run
+      # dev`, which CI does not run.
+      - name: Build and package
+        run: npm run package:mac
+
+      - name: Check the binary really is arm64
+        run: |
+          BIN=release/mac-arm64/FromScratch.app/Contents/MacOS/FromScratch
+          file "$BIN"
+          lipo -archs "$BIN" | grep -qw arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FromScratch-arm64-dmg
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest        # only moves files; no macOS tooling needed
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FromScratch-arm64-dmg
+          path: dist
+
+      # Uses the preinstalled gh CLI rather than a third-party release action,
+      # to keep the workflow's supply chain to first-party code only.
+      # GITHUB_REF_NAME is read as a shell variable rather than interpolated by
+      # Actions, so a crafted tag name cannot inject shell.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.dmg \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Unsigned build for Apple Silicon.
+
+          macOS will refuse to open it on first launch. Sequoia and later removed
+          the Control-click shortcut, so allow it under **System Settings >
+          Privacy & Security**, then press **Open Anyway**.
+
+          Building locally avoids this entirely — an app you build yourself is
+          never quarantined. See the README."
