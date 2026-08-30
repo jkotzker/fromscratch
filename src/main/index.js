@@ -12,6 +12,7 @@ import {
   settings,
   writeContent,
 } from './storage';
+import { discoverSchemes, THEMES_DIRNAME } from './themes';
 import { getNewerVersion } from './updates';
 
 const APP_NAME = 'FromScratch';
@@ -64,21 +65,64 @@ Optional arguments:
     if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
   };
 
+  // Schemes loaded from ~/.fromscratch/themes. Rescanned on demand rather than watched, so a
+  // half-written file being copied in cannot be picked up mid-copy.
+  let discovered = [];
+  const rescanSchemes = () => {
+    discovered = discoverSchemes(settings.directory);
+    return discovered;
+  };
+
+  const allSchemes = () => [...BUILT_IN_SCHEMES, ...discovered];
+
+  const describe = ({ id, name, background }) => ({ id, name, dark: isDark(background) });
+
   // A scheme is stored as an id; everything the renderer needs is derived from its two colours.
+  // An id that no longer resolves -- a theme file deleted since it was chosen -- falls back to
+  // the first built-in rather than leaving the window unstyled.
   const resolveScheme = id => {
-    const scheme = BUILT_IN_SCHEMES.find(s => s.id === id) || BUILT_IN_SCHEMES[0];
-    return {
-      id: scheme.id,
-      name: scheme.name,
-      dark: isDark(scheme.background),
-      palette: derivePalette(scheme),
-    };
+    const scheme = allSchemes().find(s => s.id === id) || BUILT_IN_SCHEMES[0];
+    return { ...describe(scheme), palette: derivePalette(scheme) };
   };
 
   // The macOS vibrancy material follows nativeTheme, so a light scheme has to say so or the
   // window keeps a dark backdrop behind a light palette.
   const applyScheme = scheme => {
     nativeTheme.themeSource = scheme.dark ? 'dark' : 'light';
+  };
+
+  const rebuildMenu = () => {
+    Menu.setApplicationMenu(
+      buildMenu({
+        appName: APP_NAME,
+        version: app.getVersion(),
+        platform: process.platform,
+        dispatch,
+        toggleFullscreen,
+        quit: () => app.quit(),
+        schemes: allSchemes().map(describe),
+        // The resolved id, not the stored one: if a theme file has been deleted since it was
+        // chosen, the window falls back to the first built-in, and the checkmark has to follow
+        // it rather than pointing at a scheme that no longer exists.
+        activeSchemeId: resolveScheme(settings.get('colorScheme', DEFAULT_SCHEME)).id,
+        selectScheme: id => selectScheme(id),
+        reloadSchemes: () => {
+          rescanSchemes();
+          rebuildMenu();
+          if (mainWindow) mainWindow.webContents.send('schemes-changed', allSchemes().map(describe));
+        },
+        openThemesFolder: () => shell.openPath(path.join(settings.directory, THEMES_DIRNAME)),
+      })
+    );
+  };
+
+  const selectScheme = id => {
+    const scheme = resolveScheme(id);
+    settings.set('colorScheme', scheme.id);
+    applyScheme(scheme);
+    rebuildMenu();
+    if (mainWindow) mainWindow.webContents.send('scheme-changed', scheme);
+    return scheme;
   };
 
   const checkForUpdates = async () => {
@@ -214,23 +258,14 @@ Optional arguments:
         folds: settings.get('folds2', []),
       },
       scheme: resolveScheme(settings.get('colorScheme', DEFAULT_SCHEME)),
-      schemes: BUILT_IN_SCHEMES.map(({ id, name, background }) => ({
-        id,
-        name,
-        dark: isDark(background),
-      })),
+      schemes: allSchemes().map(describe),
     }));
 
     ipcMain.on('content:write', (_event, content) => writeContent(content));
 
     ipcMain.on('settings:set', (_event, key, value) => settings.set(key, value));
 
-    ipcMain.handle('scheme:set', (_event, id) => {
-      const scheme = resolveScheme(id);
-      settings.set('colorScheme', scheme.id);
-      applyScheme(scheme);
-      return scheme;
-    });
+    ipcMain.handle('scheme:set', (_event, id) => selectScheme(id));
 
     ipcMain.on('update:dismiss', (_event, version) => {
       settings.set('hideUpdateMessage', { version });
@@ -240,17 +275,8 @@ Optional arguments:
       if (/^https:\/\//.test(url)) shell.openExternal(url);
     });
 
-    Menu.setApplicationMenu(
-      buildMenu({
-        appName: APP_NAME,
-        version: app.getVersion(),
-        platform: process.platform,
-        dispatch,
-        toggleFullscreen,
-        quit: () => app.quit(),
-      })
-    );
-
+    rescanSchemes();
+    rebuildMenu();
     createWindow();
   });
 }

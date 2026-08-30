@@ -106,9 +106,18 @@ export default function App() {
 
     const offUpdate = api.onUpdateAvailable(setUpdateVersion);
 
+    // Selecting a scheme from the menu happens entirely in the main process; without these the
+    // setting would change but the window would keep its old colours until a restart.
+    const offScheme = api.onSchemeChanged(setScheme);
+    const offSchemes = api.onSchemesChanged(list => {
+      schemes.current = list || [];
+    });
+
     return () => {
       offShortcut();
       offUpdate();
+      offScheme();
+      offSchemes();
       clearTimeout(saveHintTimer.current);
     };
   }, [showSaveHint]);

@@ -29,4 +29,17 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('update-available', listener);
     return () => ipcRenderer.removeListener('update-available', listener);
   },
+
+  // The scheme can also be changed from the menu, which the renderer never sees directly.
+  onSchemeChanged: callback => {
+    const listener = (_event, scheme) => callback(scheme);
+    ipcRenderer.on('scheme-changed', listener);
+    return () => ipcRenderer.removeListener('scheme-changed', listener);
+  },
+
+  onSchemesChanged: callback => {
+    const listener = (_event, schemes) => callback(schemes);
+    ipcRenderer.on('schemes-changed', listener);
+    return () => ipcRenderer.removeListener('schemes-changed', listener);
+  },
 });

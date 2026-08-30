@@ -4,13 +4,39 @@ const REPO_URL = 'https://github.com/jkotzker/fromscratch';
 
 // Accelerators live on the menu (and, for editor commands, in the CodeMirror keymap). The app
 // used to grab Esc, F1, F11 and Cmd+W/Q/R with globalShortcut, which registers them OS-wide.
-export function buildMenu({ appName, version, platform, dispatch, toggleFullscreen, quit }) {
+export function buildMenu({
+  appName,
+  version,
+  platform,
+  dispatch,
+  toggleFullscreen,
+  quit,
+  schemes = [],
+  activeSchemeId,
+  selectScheme = () => {},
+  reloadSchemes = () => {},
+  openThemesFolder = () => {},
+}) {
+  // Radio items reflect the stored id, so the menu is rebuilt whenever the scheme changes.
+  const schemeSubmenu = [
+    ...schemes.map(scheme => ({
+      label: scheme.name,
+      type: 'radio',
+      checked: scheme.id === activeSchemeId,
+      click: () => selectScheme(scheme.id),
+    })),
+    { type: 'separator' },
+    { label: 'Reload schemes', click: reloadSchemes },
+    { label: 'Open themes folder', click: openThemesFolder },
+  ];
+
   const viewSubmenu = [
     {
       label: 'Toggle theme',
       accelerator: 'CmdOrCtrl+I',
       click: () => dispatch('toggle-theme'),
     },
+    { label: 'Colour scheme', submenu: schemeSubmenu },
     { type: 'separator' },
     {
       label: 'Increase font size',
