@@ -586,6 +586,12 @@ body[data-platform='darwin'] {
   pointer-events: none;
   transition: 0.3s ease opacity;
   border-radius: 4px;
+  /*
+   * Fixed, not inherited. The editor's font size lives on .app, so an inherited size would make
+   * the size control resize this whole panel -- labels, search box and all -- while you were
+   * using it. Only the preview rows track the chosen size.
+   */
+  font-size: 14px;
 }
 
 .fontpicker.visible {
@@ -684,24 +690,48 @@ body[data-platform='darwin'] {
 }
 
 .fontpicker-name {
-  flex: 0 0 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.fontpicker-sample {
-  color: var(--text-dark-5);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fontpicker-list button.current .fontpicker-sample {
-  color: inherit;
+  /* Rows keep a stable height as the preview size changes, so the list does not jump. */
+  line-height: 1.4;
 }
 
 .fontpicker-empty {
   padding: 0.5rem;
   color: var(--text-dark-5);
+}
+
+/*
+ * Scrollbars. The platform default is an opaque light bar that reads as a white stripe over a
+ * dark scheme and ignores the palette entirely. These are drawn from the overlay tokens, which
+ * invert with the scheme, and the track is transparent so nothing shows until there is something
+ * to scroll. `background-clip: content-box` with a transparent border is what insets the thumb
+ * from the edge -- scrollbar pseudo-elements take no margin.
+ */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--overlay-bg-hover);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--overlay-text);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--overlay-text-hover);
+  background-clip: content-box;
 }

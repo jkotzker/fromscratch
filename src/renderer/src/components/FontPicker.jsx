@@ -98,12 +98,13 @@ export default function FontPicker({ visible, families, family, size, onChangeFa
               className={entry.family === current ? 'current' : ''}
               onClick={() => onChangeFamily(entry.bundled ? null : entry.family)}
             >
-              {/* Rendered in its own face, so the list is the preview. */}
-              <span className="fontpicker-name" style={{ fontFamily: `"${entry.family}", monospace` }}>
+              {/*
+                The name is the preview: rendered in its own face, at the chosen size. The panel's
+                own chrome is pinned to a fixed size in CSS, so changing the size here moves these
+                rows and nothing else.
+              */}
+              <span className="fontpicker-name" style={{ fontFamily: `"${entry.family}", monospace`, fontSize: `${size}px` }}>
                 {entry.family}
-              </span>
-              <span className="fontpicker-sample" style={{ fontFamily: `"${entry.family}", monospace` }}>
-                The quick brown fox
               </span>
             </button>
           </li>
