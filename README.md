@@ -1,4 +1,4 @@
-<img src="https://fromscratch.rocks/assets/img/icon.png?">
+<img src="resources/icon.png" width="128" alt="FromScratch icon">
 
 FromScratch
 ===========
@@ -150,6 +150,9 @@ identical while replacing everything underneath:
   registrations
 * Content is written to disk debounced instead of on every keystroke
 * The update check looks at this fork's GitHub releases
+* **New app icon** on the macOS squircle grid. The original was a sharp-cornered square with
+  window dots floating outside it, which macOS 26 would shrink onto a grey squircle background.
+  Sources and the regeneration script are in [`resources/icon-src`](resources/icon-src)
 
 The on-disk format is unchanged: `~/.fromscratch/content.txt` plus the settings files next to it.
 Folds are stored under a new `folds2` key, so the old `folds` file is simply ignored.
