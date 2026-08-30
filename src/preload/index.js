@@ -11,7 +11,8 @@ contextBridge.exposeInMainWorld('api', {
 
   setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
 
-  setTheme: lightTheme => ipcRenderer.send('theme:set', lightTheme),
+  // Resolves to the applied scheme, so the renderer never has to derive a palette itself.
+  setScheme: id => ipcRenderer.invoke('scheme:set', id),
 
   dismissUpdate: version => ipcRenderer.send('update:dismiss', version),
 

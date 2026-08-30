@@ -6,33 +6,36 @@ const { api } = window;
 
 const RELEASES_URL = 'https://github.com/jkotzker/fromscratch/releases';
 
-const LIGHT_THEME_FILTER = 'invert(100%) hue-rotate(20deg) brightness(1.1) contrast(1.4) grayscale(20%)';
-
 const DEFAULT_CONTENT =
   '|> Welcome to FromScratch.\n';
 
-const clampFontSize = size => Math.min(Math.max(size, 0.5), 2.5);
+// Font size is an absolute pixel value now, not the old 0.5-2.5 rem multiplier. Settings
+// migration converts the old value using a 16px rem base.
+const DEFAULT_FONT_SIZE = 16;
+const clampFontSize = size => Math.min(Math.max(Math.round(size), 8), 72);
 
 export default function App() {
   const [initial, setInitial] = useState(null);
-  const [fontSize, setFontSize] = useState(1);
-  const [lightTheme, setLightTheme] = useState(false);
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
+  const [scheme, setScheme] = useState(null);
   const [saveHintVisible, setSaveHintVisible] = useState(false);
   const [updateVersion, setUpdateVersion] = useState(null);
   const [shortcutsVisible, setShortcutsVisible] = useState(false);
 
   const editor = useRef(null);
   const saveHintTimer = useRef(null);
+  const schemes = useRef([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    api.init().then(({ platform, content, settings }) => {
+    api.init().then(({ platform, content, settings, scheme: active, schemes: available }) => {
       if (cancelled) return;
 
       document.body.dataset.platform = platform;
-      setFontSize(clampFontSize(settings.fontSize || 1));
-      setLightTheme(Boolean(settings.lightTheme));
+      schemes.current = available || [];
+      setFontSize(clampFontSize(settings.font?.size || DEFAULT_FONT_SIZE));
+      setScheme(active);
       setInitial({
         content: content === null ? DEFAULT_CONTENT : content,
         folds: settings.folds || [],
@@ -46,12 +49,16 @@ export default function App() {
 
   // Persist whatever changed, but only once the stored values have been loaded.
   useEffect(() => {
-    if (initial) api.setSetting('fontSize', fontSize);
+    if (initial) api.setSetting('font', { family: null, size: fontSize });
   }, [initial, fontSize]);
 
+  // The whole stylesheet reads its colours from custom properties, so applying a scheme is just
+  // setting them on the root element -- no CSS rules change.
   useEffect(() => {
-    if (initial) api.setTheme(lightTheme);
-  }, [initial, lightTheme]);
+    if (!scheme?.palette) return;
+    const root = document.documentElement;
+    for (const [name, value] of Object.entries(scheme.palette)) root.style.setProperty(name, value);
+  }, [scheme]);
 
   const showSaveHint = useCallback(() => {
     clearTimeout(saveHintTimer.current);
@@ -67,16 +74,21 @@ export default function App() {
           showSaveHint();
           break;
         case 'reset-font':
-          setFontSize(1);
+          setFontSize(DEFAULT_FONT_SIZE);
           break;
         case 'increase-font':
-          setFontSize(size => clampFontSize(size + 0.1));
+          setFontSize(size => clampFontSize(size + 1));
           break;
         case 'decrease-font':
-          setFontSize(size => clampFontSize(size - 0.1));
+          setFontSize(size => clampFontSize(size - 1));
           break;
         case 'toggle-theme':
-          setLightTheme(light => !light);
+          // Flip to a scheme of the opposite lightness rather than toggling a boolean.
+          setScheme(current => {
+            const target = schemes.current.find(s => s.dark !== current?.dark);
+            if (target) api.setScheme(target.id).then(setScheme);
+            return current;
+          });
           break;
         case 'toggle-shortcuts':
           setShortcutsVisible(visible => !visible);
@@ -128,10 +140,7 @@ export default function App() {
 
   if (!initial) return null;
 
-  const style = {
-    fontSize: `${fontSize}rem`,
-    ...(lightTheme ? { filter: LIGHT_THEME_FILTER } : {}),
-  };
+  const style = { fontSize: `${fontSize}px` };
 
   return (
     <div className="app" style={style} data-platform={api.platform}>

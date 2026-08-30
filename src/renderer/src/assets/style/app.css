@@ -94,7 +94,11 @@ body[data-platform='darwin'] {
 
 .app {
   height: 100%;
-  transition: 0.4s ease filter;
+  /* Was a transition on the light-theme invert filter. Schemes now swap the custom properties
+     instead, so this smooths the colour change rather than a filter. */
+  transition:
+    0.25s ease background-color,
+    0.25s ease color;
 }
 
 .editor {

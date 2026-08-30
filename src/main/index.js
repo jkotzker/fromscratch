@@ -2,7 +2,16 @@ import path from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } from 'electron';
 import minimist from 'minimist';
 import { buildMenu } from './menu';
-import { flushContent, initStorage, readContent, settings, writeContent } from './storage';
+import { BUILT_IN_SCHEMES, derivePalette, isDark } from './palette';
+import {
+  DEFAULT_SCHEME,
+  flushContent,
+  flushSettings,
+  initStorage,
+  readContent,
+  settings,
+  writeContent,
+} from './storage';
 import { getNewerVersion } from './updates';
 
 const APP_NAME = 'FromScratch';
@@ -55,8 +64,21 @@ Optional arguments:
     if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
   };
 
-  const applyTheme = lightTheme => {
-    nativeTheme.themeSource = lightTheme ? 'light' : 'dark';
+  // A scheme is stored as an id; everything the renderer needs is derived from its two colours.
+  const resolveScheme = id => {
+    const scheme = BUILT_IN_SCHEMES.find(s => s.id === id) || BUILT_IN_SCHEMES[0];
+    return {
+      id: scheme.id,
+      name: scheme.name,
+      dark: isDark(scheme.background),
+      palette: derivePalette(scheme),
+    };
+  };
+
+  // The macOS vibrancy material follows nativeTheme, so a light scheme has to say so or the
+  // window keeps a dark backdrop behind a light palette.
+  const applyScheme = scheme => {
+    nativeTheme.themeSource = scheme.dark ? 'dark' : 'light';
   };
 
   const checkForUpdates = async () => {
@@ -86,9 +108,7 @@ Optional arguments:
     const stored = windowState.bounds || {};
     const hasBounds = ['x', 'y', 'width', 'height'].every(key => Number.isFinite(stored[key]));
     const bounds = hasBounds && isOnAConnectedDisplay(stored) ? stored : {};
-    const lightTheme = settings.get('lightTheme', false);
-
-    applyTheme(lightTheme);
+    applyScheme(resolveScheme(settings.get('colorScheme', DEFAULT_SCHEME)));
 
     const windowSettings = {
       show: false,
@@ -181,6 +201,7 @@ Optional arguments:
 
   app.on('before-quit', () => {
     flushContent();
+    flushSettings();
   });
 
   app.whenReady().then(() => {
@@ -189,19 +210,26 @@ Optional arguments:
       version: app.getVersion(),
       content: readContent(),
       settings: {
-        fontSize: settings.get('fontSize', 1),
-        lightTheme: settings.get('lightTheme', false),
+        font: settings.get('font', { family: null, size: 16 }),
         folds: settings.get('folds2', []),
       },
+      scheme: resolveScheme(settings.get('colorScheme', DEFAULT_SCHEME)),
+      schemes: BUILT_IN_SCHEMES.map(({ id, name, background }) => ({
+        id,
+        name,
+        dark: isDark(background),
+      })),
     }));
 
     ipcMain.on('content:write', (_event, content) => writeContent(content));
 
     ipcMain.on('settings:set', (_event, key, value) => settings.set(key, value));
 
-    ipcMain.on('theme:set', (_event, lightTheme) => {
-      settings.set('lightTheme', lightTheme);
-      applyTheme(lightTheme);
+    ipcMain.handle('scheme:set', (_event, id) => {
+      const scheme = resolveScheme(id);
+      settings.set('colorScheme', scheme.id);
+      applyScheme(scheme);
+      return scheme;
     });
 
     ipcMain.on('update:dismiss', (_event, version) => {
