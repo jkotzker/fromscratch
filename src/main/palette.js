@@ -66,6 +66,13 @@ const adjust = (hex, { lightness = 0, saturation = 1 } = {}) => {
 
 const shift = (hex, delta) => adjust(hex, { lightness: delta });
 
+/** Blend two colours, `t` of the way from `a` to `b`. */
+const mix = (a, b, t) => {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex([ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t]);
+};
+
 const withAlpha = (hex, alpha) => {
   const [r, g, b] = hexToRgb(hex).map(c => Math.round(c * 255));
   // Rounded, or scaling an alpha lands things like 0.8049999999999999 in the stylesheet.
@@ -87,7 +94,7 @@ export const isDark = background => luminance(background) < 0.179;
  * @param {{background: string, foreground: string}} colors
  * @returns {Record<string, string>} CSS custom properties, ready to set on documentElement
  */
-export function derivePalette({ background, foreground }) {
+export function derivePalette({ background, foreground, selection = null, selectedText = null, cursor = null }) {
   const dark = isDark(background);
 
   // Away from the background: lighter on a dark scheme, darker on a light one.
@@ -98,13 +105,46 @@ export function derivePalette({ background, foreground }) {
   // Overlays sit on top of the surface, so they invert with it.
   const ink = alpha => (dark ? `rgba(255, 255, 255, ${alpha})` : `rgba(0, 0, 0, ${alpha})`);
 
-  // On macOS these colours are painted over the window's vibrancy material rather than over an
-  // opaque background. That material is a light neutral grey (measured at about rgb(202,203,204)),
-  // so at the original 0.35 alpha it swamps a light scheme: Solarized Light's #fdf6e3 rendered as
-  // rgb(220,216,212), losing almost all of its warmth. Dark schemes sit against a dark material
-  // and keep their character, so only light schemes need the extra opacity.
-  const veil = dark ? 1 : 2.3;
-  const tint = (hex, alpha) => withAlpha(hex, Math.min(0.95, alpha * veil));
+  // On macOS these colours are painted over the window's vibrancy material, not an opaque
+  // surface. Measured, that material is a flat neutral grey: about rgb(36,36,36) in dark mode and
+  // rgb(202,203,204) in light. At the original 0.35 alpha it therefore contributed 65% of every
+  // pixel, which was fine when the app had exactly one scheme but collapses distinct schemes onto
+  // nearly the same colour -- Brogrammer rendered rgb(30,30,30) and GitHub Dark rgb(29,30,31),
+  // a difference of one or two values per channel.
+  //
+  // The scheme has to dominate for schemes to be tellable apart, so the editor surface is close
+  // to opaque and keeps only a hint of the material behind it.
+  const SURFACE_ALPHA = 0.85;
+
+  // Active line, search match and selection used to be fixed HSL lightness steps off the
+  // background: 1%, 4% and 5%. Those are not perceptually uniform. +1% lightness on a background
+  // at 10% lightness is visible; -1% on one at 94% is not, which left the line highlight invisible
+  // on light schemes -- a difference of (0,2,5) before alpha on Solarized Light.
+  //
+  // Mixing toward the foreground instead guarantees contrast on any scheme, because the foreground
+  // is by definition the colour chosen to be readable against that background, and it keeps the
+  // overlays inside the scheme's own palette rather than washing them toward grey.
+  const overlay = t => mix(background, foreground, t);
+
+  // The active line must stay half-transparent. CodeMirror paints line backgrounds *over* the
+  // selection layer -- there is no z-index on it, and .cm-content comes later in the DOM -- so an
+  // opaque active line hides the selection underneath it, which is why CodeMirror's own default
+  // is only 27% alpha. Contrast therefore comes from mixing further toward the foreground rather
+  // than from opacity. These four values were solved so that, on both built-ins plus Brogrammer
+  // and GitHub Dark, the active line reads against the surface AND a selection still reads
+  // underneath it (>= 12/255 in both cases).
+  const ACTIVE_LINE_MIX = 0.26;
+  const ACTIVE_LINE_ALPHA = 0.5;
+
+  // `.itermcolors` files carry their own Selection Color and Cursor Color, and every scheme tested
+  // supplied both. Those are used as-is; mixing our own from the background and foreground gave
+  // Brogrammer a mid-grey selection against its light-grey text, when the scheme itself specifies
+  // a near-black #1f1f1f. Deriving is only the fallback for a scheme that omits them.
+  const selectionColor = selection || overlay(0.38);
+  const cursorColor = cursor || recede(5);
+  // Several schemes brighten text while it is selected -- GitHub Dark goes from #8b949e to
+  // #ffffff -- which is what makes a dark selection colour readable.
+  const selectedTextColor = selectedText || foreground;
 
   return {
     '--bg': background,
@@ -116,12 +156,14 @@ export function derivePalette({ background, foreground }) {
     '--bg-10': surface(10),
     '--bg-20': surface(20),
 
-    '--bg-translucent': tint(background, 0.35),
+    '--bg-translucent': withAlpha(background, SURFACE_ALPHA),
     '--bg-solid-ish': withAlpha(background, 0.95),
     '--bg-transparent': withAlpha(background, 0),
-    '--bg-1-translucent': tint(surface(1), 0.5),
-    '--bg-4-translucent': tint(surface(4), 0.5),
-    '--bg-5-translucent': tint(surface(5), 0.5),
+    '--bg-1-translucent': withAlpha(overlay(ACTIVE_LINE_MIX), ACTIVE_LINE_ALPHA),
+    '--bg-4-translucent': withAlpha(overlay(0.3), 0.85),
+    // Opaque: a scheme's Selection Color should render as the colour it names, not a blend of it
+    // with whatever is behind the window.
+    '--bg-5-translucent': selectionColor,
 
     '--text': foreground,
     '--text-dark-5': recede(5),
@@ -134,6 +176,11 @@ export function derivePalette({ background, foreground }) {
     // channel value, so panels keep their slightly muted look instead of picking up the full
     // saturation of the background.
     '--panel-bg': adjust(background, { lightness: dark ? 8.5 : -8.5, saturation: 0.5 }),
+
+    // Selection and caret come straight from the scheme when it names them.
+    '--selection': selectionColor,
+    '--selected-text': selectedTextColor,
+    '--cursor': cursorColor,
 
     '--overlay-bg': ink(0.1),
     '--overlay-bg-hover': ink(0.15),

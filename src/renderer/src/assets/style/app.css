@@ -24,6 +24,9 @@
   --text-light-15: #acb9b9;
   --text-light-20: #b9c5c5;
   --text-transparent: rgba(130, 150, 150, 0);
+  --selection: #003e4f;
+  --selected-text: #829696;
+  --cursor: #748a8a;
   --panel-bg: rgb(25, 64, 74);
   --overlay-bg: rgba(255, 255, 255, 0.1);
   --overlay-bg-hover: rgba(255, 255, 255, 0.15);
@@ -163,7 +166,7 @@ body[data-platform='darwin'] {
 
 .cm-editor .cm-content {
   padding: 3rem 0 4rem;
-  caret-color: var(--text-dark-5);
+  caret-color: var(--cursor);
   /* CodeMirror's base theme switches ligatures off; Fira Code's arrows need them back on. */
   font-variant-ligatures: contextual;
   -webkit-user-select: text;
@@ -177,20 +180,39 @@ body[data-platform='darwin'] {
 
 .cm-editor .cm-cursor,
 .cm-editor .cm-dropCursor {
-  border-left: 1px solid var(--text-dark-5);
+  border-left: 1px solid var(--cursor);
 }
 
+/*
+ * !important is load-bearing. CodeMirror injects its base theme through StyleModule using
+ * generated classes, and those rules outrank a plain `.cm-editor .cm-selectionBackground`, so this
+ * declaration never applied -- the selection rendered in CodeMirror's default #d7d4f0 no matter
+ * what the scheme said. Confirmed by reading the computed style off the live element.
+ */
 .cm-editor .cm-selectionBackground,
-.cm-editor .cm-content ::selection {
-  background: var(--bg-5);
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--selection) !important;
 }
 
-.cm-editor.cm-focused .cm-selectionBackground {
-  background: var(--bg-5);
+/*
+ * drawSelection() paints the selection into its own layer, but the browser still renders a native
+ * selection on top of the text. This rule used to read `background: var(--bg-5)`, and ::selection
+ * only honours `background-color` -- the shorthand is dropped -- so that declaration never applied
+ * and the native selection fell back to the macOS accent colour, covering the themed layer beneath
+ * it. Hiding it lets the scheme's own Selection Color show.
+ */
+::selection {
+  background-color: transparent;
 }
 
 .cm-editor .cm-activeLine {
   background: linear-gradient(90deg, var(--bg) 0%, var(--bg-1) 4%, var(--bg-1) 60%, var(--bg) 100%);
+}
+
+/* Applied by the selectedText plugin: CodeMirror draws selection behind the text and never
+   recolours it, so a scheme's Selected Text Color needs its own decoration. */
+.cm-editor .cm-selectedText {
+  color: var(--selected-text);
 }
 
 .cm-editor .cm-searchMatch {
@@ -209,7 +231,7 @@ body[data-platform='darwin'] {
 
 [data-platform='darwin'] .cm-editor .cm-selectionBackground,
 [data-platform='darwin'] .cm-editor.cm-focused .cm-selectionBackground {
-  background: var(--bg-5-translucent);
+  background: var(--bg-5-translucent) !important;
 }
 
 [data-platform='darwin'] .cm-editor .cm-activeLine {

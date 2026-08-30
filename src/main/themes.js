@@ -12,8 +12,10 @@ export const THEMES_DIRNAME = 'themes';
  *     ...
  *   </dict>
  *
- * Only the background and foreground are used. The app's whole palette derives from those two
- * (see palette.js), so the sixteen ANSI entries are read but currently ignored.
+ * Background and foreground are required -- the app's surface ramp derives from those two (see
+ * palette.js). Selection and cursor colours are used verbatim when the file supplies them, so a
+ * scheme renders with its own choices rather than something inferred from it. The sixteen ANSI
+ * entries are parsed but unused: this editor has no language mode to colour.
  *
  * Parsing is done with regular expressions rather than a plist library on purpose: the format is
  * this regular, and the alternative is a runtime dependency for one file type. Colour Space keys
@@ -50,7 +52,14 @@ export function parseItermColors(text) {
   const foreground = colors['Foreground Color'];
   if (!background || !foreground) return null;
 
-  return { background, foreground };
+  return {
+    background,
+    foreground,
+    // Optional. palette.js falls back to derived values when a scheme omits them.
+    selection: colors['Selection Color'] || null,
+    selectedText: colors['Selected Text Color'] || null,
+    cursor: colors['Cursor Color'] || null,
+  };
 }
 
 /**
