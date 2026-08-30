@@ -9,14 +9,14 @@ import { applyFolds } from '../editor/folds';
  * Thin React wrapper around a single CodeMirror 6 view. The document is uncontrolled: the editor
  * owns it after mount and reports changes upwards, which is what the autosave expects.
  */
-export default function Editor({ ref, initialContent, initialFolds, onChange, onFoldsChange, onSave }) {
+export default function Editor({ ref, initialContent, initialFolds, onChange, onFoldsChange, onSave, onToggleTheme }) {
   const parent = useRef(null);
   const view = useRef(null);
-  const callbacks = useRef({ onChange, onFoldsChange, onSave });
+  const callbacks = useRef({ onChange, onFoldsChange, onSave, onToggleTheme });
 
   useEffect(() => {
-    callbacks.current = { onChange, onFoldsChange, onSave };
-  }, [onChange, onFoldsChange, onSave]);
+    callbacks.current = { onChange, onFoldsChange, onSave, onToggleTheme };
+  }, [onChange, onFoldsChange, onSave, onToggleTheme]);
 
   useImperativeHandle(ref, () => ({
     focus: () => view.current?.focus(),
@@ -33,6 +33,7 @@ export default function Editor({ ref, initialContent, initialFolds, onChange, on
           onChange: content => callbacks.current.onChange(content),
           onFoldsChange: folds => callbacks.current.onFoldsChange(folds),
           onSave: () => callbacks.current.onSave(),
+          onToggleTheme: () => callbacks.current.onToggleTheme(),
         }),
       }),
     });

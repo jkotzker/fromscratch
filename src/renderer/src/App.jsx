@@ -25,6 +25,7 @@ export default function App() {
   const editor = useRef(null);
   const saveHintTimer = useRef(null);
   const schemes = useRef([]);
+  const activeScheme = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,10 +56,18 @@ export default function App() {
   // The whole stylesheet reads its colours from custom properties, so applying a scheme is just
   // setting them on the root element -- no CSS rules change.
   useEffect(() => {
+    activeScheme.current = scheme;
     if (!scheme?.palette) return;
     const root = document.documentElement;
     for (const [name, value] of Object.entries(scheme.palette)) root.style.setProperty(name, value);
   }, [scheme]);
+
+  // Shared by the menu accelerator and the editor keymap.
+  const toggleScheme = useCallback(() => {
+    const current = activeScheme.current;
+    const target = schemes.current.find(s => s.dark !== current?.dark);
+    if (target) api.setScheme(target.id).then(setScheme);
+  }, []);
 
   const showSaveHint = useCallback(() => {
     clearTimeout(saveHintTimer.current);
@@ -83,12 +92,7 @@ export default function App() {
           setFontSize(size => clampFontSize(size - 1));
           break;
         case 'toggle-theme':
-          // Flip to a scheme of the opposite lightness rather than toggling a boolean.
-          setScheme(current => {
-            const target = schemes.current.find(s => s.dark !== current?.dark);
-            if (target) api.setScheme(target.id).then(setScheme);
-            return current;
-          });
+          toggleScheme();
           break;
         case 'toggle-shortcuts':
           setShortcutsVisible(visible => !visible);
@@ -120,7 +124,7 @@ export default function App() {
       offSchemes();
       clearTimeout(saveHintTimer.current);
     };
-  }, [showSaveHint]);
+  }, [showSaveHint, toggleScheme]);
 
   useEffect(() => {
     const preventDefault = event => event.preventDefault();
@@ -160,6 +164,7 @@ export default function App() {
         onChange={handleChange}
         onFoldsChange={handleFoldsChange}
         onSave={showSaveHint}
+        onToggleTheme={toggleScheme}
       />
 
       <div className={saveHintVisible ? 'nosave active' : 'nosave'}>Already saved! ;)</div>
