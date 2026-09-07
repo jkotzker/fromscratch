@@ -18,6 +18,7 @@ const REM_BASE_PX = 16;
 
 export const DEFAULT_FONT = { family: null, size: REM_BASE_PX };
 export const DEFAULT_SCHEME = 'built-in:dark';
+export const DEFAULT_HIGHLIGHT_LINE = true;
 
 let dir = null;
 let contentFile = null;

@@ -8,8 +8,7 @@ const { api } = window;
 
 const RELEASES_URL = 'https://github.com/jkotzker/fromscratch/releases';
 
-const DEFAULT_CONTENT =
-  '|> Welcome to FromScratch.\n';
+const DEFAULT_CONTENT = '|> Welcome to FromScratch.\n';
 
 // Font size is an absolute pixel value now, not the old 0.5-2.5 rem multiplier. Settings
 // migration converts the old value using a 16px rem base.
@@ -26,6 +25,7 @@ export default function App() {
   const [updateVersion, setUpdateVersion] = useState(null);
   const [shortcutsVisible, setShortcutsVisible] = useState(false);
   const [fontPickerVisible, setFontPickerVisible] = useState(false);
+  const [highlightLine, setHighlightLine] = useState(true);
 
   const editor = useRef(null);
   const saveHintTimer = useRef(null);
@@ -40,6 +40,7 @@ export default function App() {
 
       document.body.dataset.platform = platform;
       schemes.current = available || [];
+      setHighlightLine(settings.highlightLine !== false);
       setFontSize(clampFontSize(settings.font?.size || DEFAULT_FONT_SIZE));
       setFontFamily(settings.font?.family || null);
       setScheme(active);
@@ -141,6 +142,13 @@ export default function App() {
     // Selecting a scheme from the menu happens entirely in the main process; without these the
     // setting would change but the window would keep its old colours until a restart.
     const offScheme = api.onSchemeChanged(setScheme);
+
+    // The line-highlight checkbox lives in the View menu, so the main process owns the value and
+    // pushes it here.
+    const offSetting = api.onSettingChanged((key, value) => {
+      if (key === 'highlightCurrentLine') setHighlightLine(value);
+    });
+
     const offSchemes = api.onSchemesChanged(list => {
       schemes.current = list || [];
     });
@@ -149,6 +157,7 @@ export default function App() {
       offShortcut();
       offUpdate();
       offScheme();
+      offSetting();
       offSchemes();
       clearTimeout(saveHintTimer.current);
     };
@@ -184,7 +193,7 @@ export default function App() {
   const style = { fontSize: `${fontSize}px` };
 
   return (
-    <div className="app" style={style} data-platform={api.platform}>
+    <div className="app" style={style} data-platform={api.platform} data-highlight-line={highlightLine ? 'on' : 'off'}>
       <Editor
         ref={editor}
         initialContent={initial.content}

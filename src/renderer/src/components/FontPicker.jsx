@@ -103,7 +103,10 @@ export default function FontPicker({ visible, families, family, size, onChangeFa
                 own chrome is pinned to a fixed size in CSS, so changing the size here moves these
                 rows and nothing else.
               */}
-              <span className="fontpicker-name" style={{ fontFamily: `"${entry.family}", monospace`, fontSize: `${size}px` }}>
+              <span
+                className="fontpicker-name"
+                style={{ fontFamily: `"${entry.family}", monospace`, fontSize: `${size}px` }}
+              >
                 {entry.family}
               </span>
             </button>

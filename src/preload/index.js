@@ -37,6 +37,14 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('scheme-changed', listener);
   },
 
+  // Settings that the menu can change on its own -- the renderer would otherwise keep rendering
+  // the old value until a restart.
+  onSettingChanged: callback => {
+    const listener = (_event, key, value) => callback(key, value);
+    ipcRenderer.on('setting-changed', listener);
+    return () => ipcRenderer.removeListener('setting-changed', listener);
+  },
+
   onSchemesChanged: callback => {
     const listener = (_event, schemes) => callback(schemes);
     ipcRenderer.on('schemes-changed', listener);

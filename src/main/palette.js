@@ -38,8 +38,7 @@ const rgbToHsl = ([r, g, b]) => {
 
   const d = max - min;
   const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  const h =
-    max === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6 : max === g ? ((b - r) / d + 2) / 6 : ((r - g) / d + 4) / 6;
+  const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6 : max === g ? ((b - r) / d + 2) / 6 : ((r - g) / d + 4) / 6;
   return [h, s, l];
 };
 
@@ -169,7 +168,6 @@ export function derivePalette({ background, foreground, selection = null, select
     '--text-dark-5': recede(5),
     '--text-light-15': emphasis(15),
     '--text-light-20': emphasis(20),
-    '--text-transparent': withAlpha(foreground, 0),
 
     // The original rgb(25, 64, 74) is not a plain ramp step: it is the same hue at +8.8 lightness
     // points with saturation halved. Fitting those two parameters reproduces it to within one

@@ -4,6 +4,7 @@ import minimist from 'minimist';
 import { buildMenu } from './menu';
 import { BUILT_IN_SCHEMES, derivePalette, isDark } from './palette';
 import {
+  DEFAULT_HIGHLIGHT_LINE,
   DEFAULT_SCHEME,
   flushContent,
   flushSettings,
@@ -112,6 +113,8 @@ Optional arguments:
           if (mainWindow) mainWindow.webContents.send('schemes-changed', allSchemes().map(describe));
         },
         openThemesFolder: () => shell.openPath(path.join(settings.directory, THEMES_DIRNAME)),
+        highlightLine: settings.get('highlightCurrentLine', DEFAULT_HIGHLIGHT_LINE),
+        setHighlightLine: value => setHighlightLine(value),
       })
     );
   };
@@ -123,6 +126,14 @@ Optional arguments:
     rebuildMenu();
     if (mainWindow) mainWindow.webContents.send('scheme-changed', scheme);
     return scheme;
+  };
+
+  // Pushed to the renderer rather than dispatched as a shortcut: the menu owns the checkmark, so
+  // the value has to live here and the window has to be told what it became.
+  const setHighlightLine = value => {
+    settings.set('highlightCurrentLine', value);
+    rebuildMenu();
+    if (mainWindow) mainWindow.webContents.send('setting-changed', 'highlightCurrentLine', value);
   };
 
   const checkForUpdates = async () => {
@@ -256,6 +267,7 @@ Optional arguments:
       settings: {
         font: settings.get('font', { family: null, size: 16 }),
         folds: settings.get('folds2', []),
+        highlightLine: settings.get('highlightCurrentLine', DEFAULT_HIGHLIGHT_LINE),
       },
       scheme: resolveScheme(settings.get('colorScheme', DEFAULT_SCHEME)),
       schemes: allSchemes().map(describe),

@@ -16,6 +16,8 @@ export function buildMenu({
   selectScheme = () => {},
   reloadSchemes = () => {},
   openThemesFolder = () => {},
+  highlightLine = true,
+  setHighlightLine = () => {},
 }) {
   // Radio items reflect the stored id, so the menu is rebuilt whenever the scheme changes.
   const schemeSubmenu = [
@@ -37,6 +39,14 @@ export function buildMenu({
       click: () => dispatch('toggle-theme'),
     },
     { label: 'Colour scheme', submenu: schemeSubmenu },
+    {
+      // No accelerator: this is a preference you set once, and every unclaimed Cmd chord is either
+      // taken by CodeMirror's defaultKeymap or reserved by macOS.
+      label: 'Highlight current line',
+      type: 'checkbox',
+      checked: highlightLine,
+      click: menuItem => setHighlightLine(menuItem.checked),
+    },
     { type: 'separator' },
     {
       label: 'Increase font size',

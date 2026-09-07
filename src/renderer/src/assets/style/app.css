@@ -23,7 +23,6 @@
   --text-dark-5: #748a8a;
   --text-light-15: #acb9b9;
   --text-light-20: #b9c5c5;
-  --text-transparent: rgba(130, 150, 150, 0);
   --selection: #003e4f;
   --selected-text: #829696;
   --cursor: #748a8a;
@@ -207,8 +206,37 @@ body[data-platform='darwin'] {
   background-color: transparent;
 }
 
+/*
+ * The band's soft edges are sized in `em`, so they scale with the type.
+ *
+ * They used to be percentages of the line box, which is the window width and has nothing to do
+ * with the font: measured, the opaque part ran 4%-60% -- 416px of a 693px box -- at 8px type and
+ * at 72px alike, while the text it marks grew with the font and ran past the fade at anything
+ * above 12px.
+ *
+ * Both ends are transparent on every platform. The line paints straight onto the editor
+ * background -- opaque elsewhere, the vibrancy material on macOS -- so fading to `--bg-transparent`
+ * is identical to fading to `--bg` on the opaque platforms, and one rule now covers both. The
+ * non-macOS rule also used `--bg-1`, a 1% lightness step off the background, which palette.js
+ * replaced everywhere else precisely because it is invisible on light schemes.
+ */
 .cm-editor .cm-activeLine {
-  background: linear-gradient(90deg, var(--bg) 0%, var(--bg-1) 4%, var(--bg-1) 60%, var(--bg) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--bg-transparent) 0,
+    var(--bg-1-translucent) 1em,
+    var(--bg-1-translucent) calc(100% - 2em),
+    var(--bg-transparent) 100%
+  );
+}
+
+/*
+ * Highlight switched off from the View menu. The decoration is still applied -- suppressing it
+ * properly would mean reconfiguring the editor through a compartment, and this is a colour, not a
+ * behaviour -- so the class stays and simply paints nothing.
+ */
+.app[data-highlight-line='off'] .cm-editor .cm-activeLine {
+  background: none;
 }
 
 /* Applied by the selectedText plugin: CodeMirror draws selection behind the text and never
@@ -234,16 +262,6 @@ body[data-platform='darwin'] {
 [data-platform='darwin'] .cm-editor .cm-selectionBackground,
 [data-platform='darwin'] .cm-editor.cm-focused .cm-selectionBackground {
   background: var(--bg-5-translucent) !important;
-}
-
-[data-platform='darwin'] .cm-editor .cm-activeLine {
-  background: linear-gradient(
-    90deg,
-    var(--text-transparent) 0%,
-    var(--bg-1-translucent) 4%,
-    var(--bg-1-translucent) 60%,
-    var(--bg-transparent) 100%
-  );
 }
 
 [data-platform='darwin'] .cm-editor .cm-searchMatch {
