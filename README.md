@@ -14,7 +14,8 @@ FromScratch is a little app that you can use as a quick note taking or todo app.
 * Use checkboxes to keep track of your TODO's
 * Powerful keyboard control
 * Replaces common syntax with symbols, such as arrows
-* Dark and Light theme
+* Dark and Light theme, plus any colour scheme you drop in as an `.itermcolors` file
+* Any monospace font installed on your machine, at any size
 * Portable mode support
 * Free
 
@@ -35,6 +36,7 @@ FromScratch is a little app that you can use as a quick note taking or todo app.
 * `cmd/ctrl +/=` - zoom text in
 * `cmd/ctrl -` - zoom text out
 * `cmd/ctrl+0` - reset text size
+* `cmd/ctrl+t` - choose the editor font and size
 * `cmd/ctrl+]/[/k` - fold note collapsing
 * `cmd/ctrl+f` - search (toggle `.*` in the search panel for regular expressions)
 * `shift+cmd/ctrl+f` - replace
@@ -45,6 +47,32 @@ FromScratch is a little app that you can use as a quick note taking or todo app.
 * `cmd/ctrl+i` - Toggle between light and dark theme
 * `alt` - show or hide menu (Windows only)
 * `cmd/ctrl+s` - ...this does nothing.
+
+### Fonts and colour schemes
+
+The **View** menu holds everything configurable:
+
+* **Font…** (`cmd/ctrl+t`) opens a picker listing the monospace families installed on your machine,
+  each name previewed in its own face. Tick *Show all fonts* for the proportional ones too. The size
+  is an absolute pixel value, so `cmd/ctrl +/-` and this field are the same setting
+* **Colour scheme** lists the two built-ins plus every scheme found in `~/.fromscratch/themes`. Drop
+  `.itermcolors` files in there — the format iTerm2, and most terminal-theme galleries, already
+  export — and choose **Reload schemes**. Background, foreground, selection, selected-text and cursor
+  colours are all read from the file and used as given
+* **Highlight current line** turns the cursor-line band on or off
+
+Settings live in `~/.fromscratch/settings.json` and can be edited by hand:
+
+```json
+{
+  "font": { "family": "JetBrains Mono", "size": 16 },
+  "colorScheme": "file:Tomorrow Night",
+  "highlightCurrentLine": true
+}
+```
+
+Older installs are migrated automatically. FromScratch used to write one file per setting; those
+files are read once, folded into `settings.json`, and then left alone, so downgrading loses nothing.
 
 ## Development
 
@@ -179,6 +207,11 @@ Folds are stored under a new `folds2` key, so the old `folds` file is simply ign
 * Layered SVGs are included for **Icon Composer**, so the Liquid Glass `.icon` for macOS 26 can be
   assembled without redrawing anything. That step needs Tahoe 26.4 and Xcode 26, so only the
   `.icns` is built here
+* **Configurable font and colour schemes** — a font picker over the locally installed families, and
+  colour schemes loaded from `.itermcolors` files. Replaces the old light theme, which was a CSS
+  `invert()` filter over the dark one, with real palettes derived from each scheme's own colours
+* **Settings in one JSON file** at `~/.fromscratch/settings.json`, migrated from the per-key files
+  the app used to write
 * **GitHub Actions workflow** building and linting on every push, and publishing an arm64 `.dmg` to
   a GitHub release on `v*` tags
 * App id is `com.jkotzker.fromscratch`, and the repository, issue, release and update-check URLs
