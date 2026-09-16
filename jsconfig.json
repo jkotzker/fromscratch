@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    // Extensionless relative imports ('./palette') are resolved by Vite, not Node, so the
+    // language server has to resolve them the same way. node16/nodenext would fail on every one.
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    // This project has no type checker and no propTypes (see eslint.config.mjs). Checking is off
+    // on purpose: the point of this file is a cross-file symbol graph for editor tooling, not
+    // type enforcement. Turning it on would surface hundreds of errors nobody intends to fix.
+    "checkJs": false,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": false,
+    "lib": ["esnext", "dom", "dom.iterable"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "out", "release"]
+}
