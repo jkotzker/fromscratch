@@ -229,7 +229,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     ///   in the font panel), `trait:bold` (the font manager's Bold, delivered through
     ///   `changeFont:` to its target), `settings:open`, `settings:press:<label>` (presses the
     ///   control with that accessibility label in the Settings window), `select:<loc,len>`,
-    ///   `choose-font` (Settings › Choose…), `reload`, `log`.
+    ///   `choose-font` (Settings › Choose…), `reload`, `update:dismiss` (clicks the update bar's ×), `log`.
+    /// `FROMSCRATCH_DEBUG_LATEST_TAG=<tag>` replaces the GitHub release check with that tag.
     /// `FROMSCRATCH_DEBUG_ACTIVATE=1` first activates the app and makes the window key (it takes
     /// focus from the frontmost app). `FROMSCRATCH_DEBUG_MENU=1` then logs every menu item with its shortcut and whether it is
     /// enabled. Each step logs the text, selection and undo name with the prefix `FROMSCRATCH_DEBUG`.
@@ -338,6 +339,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             note = debugPress(label: label)
         case "reload":
             schemeController?.reload()
+        case "update" where argument == "dismiss":
+            note = "clicked=\(editor.debugDismissUpdate())"
         case "select":
             // Moves the caret or selection after launch, so a capture shows whether the old band
             // was redrawn away.

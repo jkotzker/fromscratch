@@ -30,6 +30,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     private let scrollView = NSScrollView()
     let textView = EditorTextView(usingTextLayoutManager: true)
     private let goToLineBar = GoToLineBar()
+    private(set) var updateBar: UpdateNoticeBar?
+    private var updateCheckStarted = false
     private var escapeMonitor: Any?
     private var lineHeight: CGFloat = 20
     /// From willEnter until didExit: full screen is not persisted, as in v2.
@@ -91,6 +93,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             window.zoom(nil)
         }
         window.makeFirstResponder(textView)
+        startUpdateCheck()
     }
 
     // MARK: Building
@@ -219,9 +222,72 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         OverlayNotice.style = OverlayNotice.Style(
             background: overlayBackground, text: overlayText,
             font: Fonts.font(for: FontSetting(family: setting.family, size: 16, face: setting.face)))
+        updateBar?.style = updateBarStyle()
         goToLineBar.style = GoToLineBar.Style(
             backdrop: NSColor(declared: scheme.colors.background), overlayBackground: overlayBackground,
             overlayText: overlayText, font: textView.font ?? Fonts.font(for: setting))
+    }
+
+    private func updateBarStyle() -> UpdateNoticeBar.Style {
+        let palette = model.scheme.palette
+        let setting = model.settings.font
+        return UpdateNoticeBar.Style(
+            background: NSColor(srgb: palette.overlayBackground), text: NSColor(srgb: palette.overlayText),
+            textHover: NSColor(srgb: palette.overlayTextHover),
+            font: Fonts.font(for: FontSetting(family: setting.family, size: 16, face: setting.face)))
+    }
+
+    // MARK: Update notice
+
+    /// The version in Info.plist; an unbundled debug run has none, so it reports the release it builds.
+    static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0.0"
+    }
+
+    /// Once per launch, after the window shows: asks GitHub off the main thread and, only when the
+    /// answer is newer and not the version the user already dismissed, shows the bar. Never reports
+    /// a failure (v2's getNewerVersion).
+    private func startUpdateCheck() {
+        guard !updateCheckStarted else { return }
+        updateCheckStarted = true
+        var override: String?
+        #if DEBUG
+        override = ProcessInfo.processInfo.environment["FROMSCRATCH_DEBUG_LATEST_TAG"]
+        #endif
+        let fixedTag = override
+        Task { [weak self] in
+            let tag: String?
+            if let fixedTag {
+                tag = fixedTag
+            } else {
+                tag = await UpdateCheck.fetchLatestTag(session: .shared)
+            }
+            guard let self, let tag,
+                  let version = UpdateCheck.newerVersion(latestTag: tag, current: Self.currentVersion),
+                  version != self.model.settings.hiddenUpdateVersion else { return }
+            self.showUpdateBar(version: version)
+        }
+    }
+
+    func showUpdateBar(version: String) {
+        guard !didClose, updateBar == nil, let content = window?.contentView else { return }
+        let bar = UpdateNoticeBar(version: version)
+        bar.style = updateBarStyle()
+        bar.onOpen = { [weak self] in
+            NSWorkspace.shared.open(UpdateCheck.releasesPage)
+            self?.hideUpdateBar()
+        }
+        bar.onDismiss = { [weak self] in
+            self?.model.settings.hiddenUpdateVersion = version
+            self?.hideUpdateBar()
+        }
+        bar.attach(to: content)
+        updateBar = bar
+    }
+
+    private func hideUpdateBar() {
+        updateBar?.removeFromSuperview()
+        updateBar = nil
     }
 
     /// Insets that depend on the window size: the 5vw gutters and the scroll-past-end space.
@@ -476,16 +542,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             """
     }
 
+    /// Clicks the update bar's ×, as a user would; false when no bar is showing.
+    func debugDismissUpdate() -> Bool {
+        guard let bar = updateBar else { return false }
+        bar.performDismiss()
+        return true
+    }
+
     /// One line describing what the checks look at.
     func debugState() -> String {
         let selection = textView.selectedRanges.map { "\($0.rangeValue.location),\($0.rangeValue.length)" }
         return String(
-            format: "text=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ TextKit2=%@",
+            format: "text=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld TextKit2=%@",
             textView.string.debugDescription, selection.joined(separator: ";"),
             textView.undoManager?.undoActionName ?? "-", textView.undoManager?.groupingLevel ?? -1,
             window?.firstResponder.map { String(describing: type(of: $0)) } ?? "-",
             goToLineBar.isOpen ? "open" : "closed",
             (window?.contentView?.subviews.compactMap { ($0 as? OverlayNotice)?.text } ?? []).debugDescription,
+            updateBar.map { "shown(\($0.version))" } ?? "none", window?.windowNumber ?? 0,
             textView.textLayoutManager != nil ? "yes" : "no")
     }
     #endif
