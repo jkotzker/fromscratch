@@ -32,7 +32,7 @@ public struct RGB: Equatable, Sendable {
         (Double(r) / 255, Double(g) / 255, Double(b) / 255)
     }
 
-    fileprivate init(unit r: Double, _ g: Double, _ b: Double) {
+    init(unit r: Double, _ g: Double, _ b: Double) {
         func q(_ c: Double) -> UInt8 {
             UInt8((min(1, max(0, c)) * 255).rounded(.toNearestOrAwayFromZero))
         }
