@@ -123,6 +123,23 @@ struct WindowChromeTests {
         #expect(content.bounds.maxY - field.maxY >= EditorWindowController.titlebarHeight(of: window) - 0.5)
     }
 
+    /// macOS 26's titlebar is 32 pt, taller than the 28 pt padding that clears Sequoia's. A toolbar
+    /// makes the band taller here too, so the field must follow the measured height.
+    @Test func goToLineFieldClearsATallerTitlebar() throws {
+        let editor = try makeEditor()
+        let window = try #require(editor.window)
+        let content = try #require(window.contentView)
+        window.toolbar = NSToolbar(identifier: "taller-titlebar")
+        content.layoutSubtreeIfNeeded()
+        let titlebar = EditorWindowController.titlebarHeight(of: window)
+        try #require(titlebar > GoToLineBar.topPadding)
+        editor.showGoToLine(nil)
+        content.layoutSubtreeIfNeeded()
+        let bar = try #require(content.subviews.compactMap { $0 as? GoToLineBar }.first)
+        let field = content.convert(bar.field.bounds, from: bar.field)
+        #expect(content.bounds.maxY - field.maxY >= titlebar - 0.5)
+    }
+
     // MARK: Update bar gives way to the find bar and go-to strip
 
     @Test func goToLineStripReplacesTheUpdateBarUntilClosed() throws {

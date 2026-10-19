@@ -376,6 +376,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     private func layoutEditor() {
         guard let window else { return }
         let titlebar = Self.titlebarHeight(of: window)
+        if goToLineBar.titlebarHeight != titlebar { goToLineBar.titlebarHeight = titlebar }
         if scrollView.contentInsets.top != titlebar {
             scrollView.contentInsets = NSEdgeInsets(top: titlebar, left: 0, bottom: 0, right: 0)
         }
@@ -455,6 +456,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         // Slide down only on the way in, and not when ⌃G just refocuses an open strip.
         let slide = !goToLineBar.isOpen && animatesChrome && window?.isVisible == true
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if let window { goToLineBar.titlebarHeight = Self.titlebarHeight(of: window) }
         goToLineBar.open(in: content, initialText: String(line), slideDuration: slide ? Self.chromeAnimationDuration : 0)
         syncUpdateBarVisibility()
     }

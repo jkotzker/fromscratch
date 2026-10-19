@@ -16,6 +16,7 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
     // v2 on macOS: `.cm-panel.cm-dialog` padding 1.75rem on top (clear of the traffic lights) and
     // 0.5rem below (v3 uses 0.875rem below, so the field doesn't sit on the strip's bottom edge);
     // the field has a 12rem minimum width and 0.15rem 0.4rem padding.
+    // 28 pt is Sequoia's titlebar; macOS 26's is 32 pt, so the field follows `titlebarHeight`.
     static let topPadding: CGFloat = 28
     static let bottomPadding: CGFloat = 14
     static let fieldMinimumWidth: CGFloat = 192
@@ -30,6 +31,11 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
     let field = NSTextField(string: "")
     private let label = NSTextField(labelWithString: "Go to line")
     private var leading: NSLayoutConstraint?
+    private var fieldTop: NSLayoutConstraint?
+    /// The window's titlebar band, measured by the editor; the field never starts inside it.
+    var titlebarHeight: CGFloat = 0 {
+        didSet { fieldTop?.constant = max(Self.topPadding, titlebarHeight) }
+    }
     private var isClosing = false
     var style: Style? {
         didSet { applyStyle() }
@@ -52,16 +58,18 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
         addSubview(label)
         addSubview(field)
         let leading = label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8)
+        let fieldTop = field.topAnchor.constraint(equalTo: topAnchor, constant: Self.topPadding)
         NSLayoutConstraint.activate([
             leading,
             field.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
             field.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.fieldMinimumWidth),
             field.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            field.topAnchor.constraint(equalTo: topAnchor, constant: Self.topPadding),
+            fieldTop,
             field.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.bottomPadding),
             label.firstBaselineAnchor.constraint(equalTo: field.firstBaselineAnchor),
         ])
         self.leading = leading
+        self.fieldTop = fieldTop
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Go to line")
