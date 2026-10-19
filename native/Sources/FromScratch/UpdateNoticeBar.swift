@@ -8,6 +8,8 @@ import AppKit
 @MainActor
 final class UpdateNoticeBar: NSView {
     struct Style {
+        /// The scheme's opaque editor background; the bar's tint is composited over it.
+        var backdrop: NSColor
         var background: NSColor
         var text: NSColor
         var textHover: NSColor
@@ -138,11 +140,22 @@ final class UpdateNoticeBar: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        guard let style else { return }
+        guard style != nil else { return }
+        layer?.backgroundColor = backgroundColor.cgColor
+    }
+
+    /// The colour the translucent tint would show over the plain editor background, drawn opaque
+    /// so note text scrolling under the bar cannot show through.
+    var backgroundColor: NSColor {
+        guard let style else { return .clear }
         // `--overlay-bg-hover` is 0.15 ink against 0.1 at rest.
         let alpha = isHovered ? min(1, style.background.alphaComponent * 1.5) : style.background.alphaComponent
-        layer?.backgroundColor = style.background.withAlphaComponent(alpha).cgColor
+        let ink = style.background.withAlphaComponent(1)
+        return (style.backdrop.blended(withFraction: alpha, of: ink) ?? ink).withAlphaComponent(1)
     }
+
+    /// Hover state for tests, which cannot move the pointer.
+    func setHoveredForTesting(_ hovered: Bool) { setHovered(hovered) }
 }
 
 private extension NSLayoutConstraint {

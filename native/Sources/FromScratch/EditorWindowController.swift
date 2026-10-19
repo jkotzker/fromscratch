@@ -250,6 +250,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         let palette = model.scheme.palette
         let setting = model.settings.font
         return UpdateNoticeBar.Style(
+            backdrop: NSColor(declared: model.scheme.colors.background),
             background: NSColor(srgb: palette.overlayBackground), text: NSColor(srgb: palette.overlayText),
             textHover: NSColor(srgb: palette.overlayTextHover),
             font: Fonts.font(for: FontSetting(family: setting.family, size: 16, face: setting.face)))
@@ -301,11 +302,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
         bar.attach(to: content)
         updateBar = bar
+        content.layoutSubtreeIfNeeded()
+        layoutEditor()
     }
 
     private func hideUpdateBar() {
         updateBar?.removeFromSuperview()
         updateBar = nil
+        layoutEditor()
     }
 
     /// The height of the titlebar band at the top of the full-size content view: the part
@@ -327,6 +331,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         // with a 60 pt inset it moved to 60 pt and still covered the text). The text moves down
         // by the bar's height instead, so no line hides behind it.
         let findBar = findBarHeight
+        // The update bar covers the top 56 pt of the window; the text clears whichever bar reaches
+        // lower, with the same gap (topInset - titlebar) the find bar leaves.
+        let bandBottom = max(titlebar + findBar, updateBar == nil ? 0 : UpdateNoticeBar.height)
+        let firstLineTop = bandBottom + max(0, Self.topInset - titlebar)
         // The clip view still spans the whole window; the inset only offsets the document.
         let fullHeight = scrollView.contentSize.height
         // Scroll past the end: the last line can be scrolled up to the top of the window, as
@@ -338,7 +346,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         textView.minSize = NSSize(width: 0, height: max(0, fullHeight - titlebar))
         // The document starts below the titlebar, so the text keeps its 48 pt from the window top.
         textView.setInsets(
-            top: max(0, Self.topInset - titlebar) + findBar, bottom: bottom,
+            top: max(0, firstLineTop - titlebar), bottom: bottom,
             horizontal: (window.frame.width * Self.horizontalInsetFraction).rounded())
     }
 

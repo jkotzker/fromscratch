@@ -92,6 +92,24 @@ struct WindowChromeTests {
         #expect(bar.frame.height == UpdateNoticeBar.height)
     }
 
+    @Test func updateBarIsOpaqueAndTheTextClearsItUntilDismissed() throws {
+        let editor = try makeEditor()
+        let content = try #require(editor.window?.contentView)
+        editor.showUpdateBar(version: "9.9.9")
+        content.layoutSubtreeIfNeeded()
+        let bar = try #require(editor.updateBar)
+        #expect(bar.backgroundColor.alphaComponent == 1)
+        bar.setHoveredForTesting(true)
+        #expect(bar.backgroundColor.alphaComponent == 1)
+        let barBottom = bar.frame.height
+        let shown = try #require(editor.firstLineTopFromWindowTop())
+        #expect(shown >= barBottom - 0.5)
+        #expect(editor.debugDismissUpdate())
+        content.layoutSubtreeIfNeeded()
+        let after = try #require(editor.firstLineTopFromWindowTop())
+        #expect(abs(after - EditorWindowController.topInset) < 0.5)
+    }
+
     @Test func goToLineFieldStartsBelowTheTitlebar() throws {
         let editor = try makeEditor()
         let window = try #require(editor.window)
