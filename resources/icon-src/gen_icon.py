@@ -34,7 +34,7 @@ ROWS = (1.0, SHORT_W / LONG_W, 1.0, SHORT_W / LONG_W)
 
 # --- colours ------------------------------------------------------------------
 # Everything but the dark gradient stop comes from the app's own stylesheet
-# (src/renderer/src/assets/style/app.css).
+# (src/renderer/src/assets/style/app.css on the 2.x line, master branch).
 INK = "#829696"              # --text, the bars
 INK_HI = "#9aacac"           # lighter stop, glass bars only
 INK_LO = "#73898a"           # darker stop, glass bars only

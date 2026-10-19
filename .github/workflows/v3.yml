@@ -1,7 +1,7 @@
 name: v3
 
-# The native macOS build. It lives beside build.yml, which keeps building the
-# Electron 2.x line from master, so the two never share a trigger.
+# The native macOS build. The Electron 2.x line is built from master by its own
+# workflow, so the two never share a trigger.
 on:
   push:
     branches: [v3]

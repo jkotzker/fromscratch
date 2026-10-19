@@ -37,7 +37,7 @@ System icons carry **no outer shadow**: alpha is 0 three pixels in from every ed
 
 ## Colours
 
-Every colour except one comes from the app's own stylesheet (`src/renderer/src/assets/style/app.css`):
+Every colour except one comes from the app's own stylesheet (`src/renderer/src/assets/style/app.css` on the 2.x line, `master` branch):
 
 - `#829696` — `--text`, the bars
 - `#b9c5c5` — `--text-light-20`, the small-size bars

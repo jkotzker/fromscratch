@@ -118,7 +118,7 @@ The original project stopped at Electron 4 / webpack 4 / Babel 6 / node-sass, wh
 * **electron-vite + Vite** instead of webpack, Babel and the DLL build
 * **Electron 43**, built for Apple Silicon, with `contextIsolation`, `sandbox` and a preload bridge instead of the removed `remote` module
 * **React 19** function components
-* **CodeMirror 6** instead of CodeMirror 5 and the unmaintained `react-codemirror`. Indentation folding, checkbox toggling and the fold persistence are reimplemented in `src/renderer/src/editor`
+* **CodeMirror 6** instead of CodeMirror 5 and the unmaintained `react-codemirror`. Indentation folding, checkbox toggling and the fold persistence are reimplemented in `src/renderer/src/editor` on `master`
 * **Plain CSS** with custom properties instead of Sass
 * macOS vibrancy uses `under-window` driven by `nativeTheme` (`ultra-dark`/`medium-light` were removed in Electron 27)
 * Shortcuts come from the menu and the editor keymap instead of OS-wide `globalShortcut` registrations
@@ -134,7 +134,7 @@ The on-disk format is unchanged: `~/.fromscratch/content.txt` plus the settings 
 * Layered SVGs are included for **Icon Composer**, so the Liquid Glass `.icon` for macOS 26 can be assembled without redrawing anything. That step needs Tahoe 26.4 and Xcode 26, so only the `.icns` is built here
 * **Configurable font and colour schemes** — a font picker over the locally installed families, and colour schemes loaded from `.itermcolors` files. Replaces the old light theme, which was a CSS `invert()` filter over the dark one, with real palettes derived from each scheme's own colours
 * **Settings in one JSON file** at `~/.fromscratch/settings.json`, migrated from the per-key files the app used to write
-* **GitHub Actions workflow** building and linting on every push, and publishing an arm64 `.dmg` to a GitHub release on `v2.*` tags
+* **GitHub Actions workflow** on `master` building and linting on every push, and publishing an arm64 `.dmg` to a GitHub release on `v2.*` tags
 * **Version 3** is a native Swift and AppKit rewrite of the app, built by its own workflow (`v3.yml`) and released from `v3.*` tags. 2.x on `master` is the last cross-platform line
 * App id is `com.jkotzker.fromscratch`, and the repository, issue, release and update-check URLs point at this fork
 

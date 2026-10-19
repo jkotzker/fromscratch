@@ -1,7 +1,7 @@
-// Generates Tests/FromScratchCoreTests/Fixtures/palette.json from the unmodified v2 palette.js,
+// Generates Tests/FromScratchCoreTests/Fixtures/palette.json from the vendored v2 palette.js (scripts/reference/palette.mjs),
 // so the Swift port is checked against what v2 actually emits.
 //   node native/scripts/gen-palette-fixtures.mjs > native/Tests/FromScratchCoreTests/Fixtures/palette.json
-import { derivePalette, isDark, BUILT_IN_SCHEMES } from '../../src/main/palette.js';
+import { derivePalette, isDark, BUILT_IN_SCHEMES } from './reference/palette.mjs';
 
 const inputs = [
   ...BUILT_IN_SCHEMES.map(s => ({ background: s.background, foreground: s.foreground })),

@@ -1,3 +1,6 @@
+// Vendored, unmodified copy of src/main/palette.js (renamed .mjs so Node treats it as ESM without a package.json) from the v2 (2.x, master branch) Electron app.
+// native/scripts/gen-palette-fixtures.mjs imports it to generate the fixtures that the Swift
+// palette (FromScratchCore/Palette.swift) is tested against. Do not edit it.
 /**
  * Derives the app's full CSS custom-property set from two colours.
  *
