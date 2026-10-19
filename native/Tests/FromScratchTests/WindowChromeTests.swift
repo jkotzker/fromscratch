@@ -121,6 +121,77 @@ struct WindowChromeTests {
         #expect(content.bounds.maxY - field.maxY >= EditorWindowController.titlebarHeight(of: window) - 0.5)
     }
 
+    // MARK: Update bar gives way to the find bar and go-to strip
+
+    @Test func goToLineStripReplacesTheUpdateBarUntilClosed() throws {
+        let editor = try makeEditor()
+        let content = try #require(editor.window?.contentView)
+        editor.showUpdateBar(version: "9.9.9")
+        content.layoutSubtreeIfNeeded()
+        let bar = try #require(editor.updateBar)
+        #expect(!bar.isHidden && !editor.isUpdateBarSuppressed)
+        let shown = try #require(editor.firstLineTopFromWindowTop())
+        #expect(shown >= UpdateNoticeBar.height - 0.5)
+
+        editor.showGoToLine(nil)
+        content.layoutSubtreeIfNeeded()
+        let strip = try #require(content.subviews.compactMap { $0 as? GoToLineBar }.first)
+        #expect(bar.isHidden && editor.isUpdateBarSuppressed)
+        #expect(editor.updateBar === bar)
+        #expect(isInside(try hit(editor, fromTop: 10), strip))
+        let withStrip = try #require(editor.firstLineTopFromWindowTop())
+        #expect(abs(withStrip - EditorWindowController.topInset) < 0.5)
+
+        strip.close(restoreFocus: true)
+        content.layoutSubtreeIfNeeded()
+        #expect(!bar.isHidden && !editor.isUpdateBarSuppressed)
+        #expect(isInside(try hit(editor, fromTop: 10), bar))
+        let restored = try #require(editor.firstLineTopFromWindowTop())
+        #expect(restored >= UpdateNoticeBar.height - 0.5)
+    }
+
+    @Test func findBarReplacesTheUpdateBarUntilClosed() throws {
+        let editor = try makeEditor()
+        let content = try #require(editor.window?.contentView)
+        editor.showUpdateBar(version: "9.9.9")
+        let bar = try #require(editor.updateBar)
+
+        showFindBar(editor)
+        let find = try #require(editor.findBarRect(in: content))
+        #expect(bar.isHidden && editor.isUpdateBarSuppressed)
+        let withFind = try #require(editor.firstLineTopFromWindowTop())
+        #expect(abs(withFind - (EditorWindowController.topInset + find.height)) < 0.5)
+
+        editor.scrollView.isFindBarVisible = false
+        content.layoutSubtreeIfNeeded()
+        #expect(!bar.isHidden && !editor.isUpdateBarSuppressed)
+        let restored = try #require(editor.firstLineTopFromWindowTop())
+        #expect(restored >= UpdateNoticeBar.height - 0.5)
+    }
+
+    @Test func updateBarStaysHiddenUntilBothTopBarsCloseAndIsNeverDismissedByThem() throws {
+        let editor = try makeEditor()
+        let content = try #require(editor.window?.contentView)
+        let before = editor.model.settings.hiddenUpdateVersion
+        editor.showUpdateBar(version: "9.9.9")
+        let bar = try #require(editor.updateBar)
+        showFindBar(editor)
+        editor.showGoToLine(nil)
+        editor.scrollView.isFindBarVisible = false
+        #expect(bar.isHidden)
+        let strip = try #require(content.subviews.compactMap { $0 as? GoToLineBar }.first)
+        strip.close(restoreFocus: true)
+        #expect(!bar.isHidden)
+        #expect(editor.model.settings.hiddenUpdateVersion == before)
+    }
+
+    @Test func updateBarShownWhileATopBarIsOpenStartsHidden() throws {
+        let editor = try makeEditor()
+        editor.showGoToLine(nil)
+        editor.showUpdateBar(version: "9.9.9")
+        #expect(try #require(editor.updateBar).isHidden)
+    }
+
     // MARK: Drag strip
 
     @Test func dragStripSpansTheTopOfTheWindow() throws {
@@ -169,6 +240,8 @@ struct WindowChromeTests {
         #expect(findHit !== editor.dragStrip)
         #expect(isInside(findHit, try #require(editor.scrollView.findBarView)))
 
+        // The update bar gives way to the find bar, so check it once the find bar is closed.
+        editor.scrollView.isFindBarVisible = false
         editor.showUpdateBar(version: "9.9.9")
         content.layoutSubtreeIfNeeded()
         let update = try #require(editor.updateBar)

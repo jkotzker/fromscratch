@@ -29,7 +29,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     static let saveFailedNotice = "Could not save your note."
     static let saveFailedNoticeDuration: TimeInterval = 2
 
-    private let model: AppModel
+    let model: AppModel
     private let surfaceView = SurfaceView()
     let scrollView = EditorScrollView()
     let dragStrip = TitlebarDragView()
@@ -37,6 +37,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     private let goToLineBar = GoToLineBar()
     private(set) var updateBar: UpdateNoticeBar?
     private var updateCheckStarted = false
+    /// True while the find bar or the go-to-line strip is open: they take the update bar's place
+    /// until closed. Not a dismissal, so `hiddenUpdateVersion` is never touched.
+    private(set) var isUpdateBarSuppressed = false
+    /// Off in tests, which need the end state synchronously.
+    var animatesChrome = true
+    static let chromeAnimationDuration: TimeInterval = 0.18
     private var escapeMonitor: Any?
     private var lineHeight: CGFloat = 20
     /// From willEnter until didExit: full screen is not persisted, as in v2.
@@ -151,7 +157,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets()
         effect.addSubview(scrollView)
-        scrollView.onFindBarChange = { [weak self] in self?.layoutEditor() }
+        scrollView.onFindBarChange = { [weak self] in
+            self?.syncUpdateBarVisibility()
+            self?.layoutEditor()
+        }
         // Above the text; the go-to-line strip and the update bar are added later, so above it.
         dragStrip.attach(to: effect)
         dragStrip.excludedRects = { [weak self] in self?.findBarRect(in: self?.dragStrip).map { [$0] } ?? [] }
@@ -302,8 +311,51 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
         bar.attach(to: content)
         updateBar = bar
+        bar.isHidden = isUpdateBarSuppressed
         content.layoutSubtreeIfNeeded()
         layoutEditor()
+    }
+
+    /// Whether the find bar or the go-to strip is open, so the update bar gives way to it.
+    private var isTopBarOpen: Bool { isFindBarShowing || goToLineBar.isOpen }
+
+    private func syncUpdateBarVisibility() {
+        let suppress = isTopBarOpen
+        guard suppress != isUpdateBarSuppressed else { return }
+        isUpdateBarSuppressed = suppress
+        guard let bar = updateBar else { return }
+        // The text clears the update bar only while it shows. (Without one, the insets are
+        // untouched, so opening the strip never moves the scroll position.)
+        layoutEditor()
+        let animate = animatesChrome && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            && window?.isVisible == true
+        guard animate else {
+            bar.layer?.removeAllAnimations()
+            bar.alphaValue = 1
+            bar.isHidden = suppress
+            return
+        }
+        // The system find bar cannot be animated, so the update bar fades out as it appears; the
+        // go-to strip slides down over it meanwhile.
+        if suppress {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = Self.chromeAnimationDuration
+                bar.animator().alphaValue = 0
+            }, completionHandler: { [weak self, weak bar] in
+                MainActor.assumeIsolated {
+                    guard let self, let bar, self.isUpdateBarSuppressed else { return }
+                    bar.isHidden = true
+                    bar.alphaValue = 1
+                }
+            })
+        } else {
+            bar.alphaValue = 0
+            bar.isHidden = false
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.chromeAnimationDuration
+                bar.animator().alphaValue = 1
+            }
+        }
     }
 
     private func hideUpdateBar() {
@@ -333,7 +385,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         let findBar = findBarHeight
         // The update bar covers the top 56 pt of the window; the text clears whichever bar reaches
         // lower, with the same gap (topInset - titlebar) the find bar leaves.
-        let bandBottom = max(titlebar + findBar, updateBar == nil ? 0 : UpdateNoticeBar.height)
+        let bandBottom = max(titlebar + findBar, updateBar == nil || isUpdateBarSuppressed ? 0 : UpdateNoticeBar.height)
         let firstLineTop = bandBottom + max(0, Self.topInset - titlebar)
         // The clip view still spans the whole window; the inset only offsets the document.
         let fullHeight = scrollView.contentSize.height
@@ -350,8 +402,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             horizontal: (window.frame.width * Self.horizontalInsetFraction).rounded())
     }
 
+    private var isFindBarShowing: Bool {
+        guard scrollView.isFindBarVisible, let bar = scrollView.findBarView else { return false }
+        return !bar.isHidden
+    }
+
     private var findBarHeight: CGFloat {
-        guard scrollView.isFindBarVisible, let bar = scrollView.findBarView, !bar.isHidden else { return 0 }
+        guard isFindBarShowing, let bar = scrollView.findBarView else { return 0 }
         return bar.frame.height
     }
 
@@ -395,7 +452,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     @objc func showGoToLine(_ sender: Any?) {
         guard let content = window?.contentView else { return }
         let line = Self.lineNumber(at: textView.selectedRange().location, in: textView.string as NSString)
-        goToLineBar.open(in: content, initialText: String(line))
+        // Slide down only on the way in, and not when ⌃G just refocuses an open strip.
+        let slide = !goToLineBar.isOpen && animatesChrome && window?.isVisible == true
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        goToLineBar.open(in: content, initialText: String(line), slideDuration: slide ? Self.chromeAnimationDuration : 0)
+        syncUpdateBarVisibility()
     }
 
     var isGoToLineOpen: Bool { goToLineBar.isOpen }
@@ -417,6 +478,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             guard let self, restoreFocus else { return }
             self.window?.makeFirstResponder(self.textView)
         }
+        goToLineBar.onClosed = { [weak self] in self?.syncUpdateBarVisibility() }
     }
 
     /// 1-based line of `location`, counting lines the way `TextCommands.parseGoToLine` does: a
@@ -650,7 +712,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             window?.firstResponder.map { String(describing: type(of: $0)) } ?? "-",
             goToLineBar.isOpen ? "open" : "closed",
             (window?.contentView?.subviews.compactMap { ($0 as? OverlayNotice)?.text } ?? []).debugDescription,
-            updateBar.map { "shown(\($0.version))" } ?? "none", window?.windowNumber ?? 0,
+            updateBar.map { "\(isUpdateBarSuppressed ? "suppressed" : "shown")(\($0.version))" } ?? "none", window?.windowNumber ?? 0,
             window?.styleMask.contains(.fullScreen) == true ? "yes" : "no", window?.collectionBehavior.rawValue ?? 0,
             window.map(Self.titlebarHeight(of:)) ?? -1, firstLineTopFromWindowTop() ?? -1,
             findBarRect(in: window?.contentView).map { "\(NSStringFromRect($0)) fromTop=\((window?.contentView?.bounds.maxY ?? 0) - $0.maxY)" } ?? "hidden",

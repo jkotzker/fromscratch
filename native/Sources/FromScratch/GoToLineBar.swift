@@ -24,6 +24,8 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
     var onCommit: ((String) -> Bool)?
     /// Called once the bar has closed. `restoreFocus` is false when focus already went elsewhere.
     var onClose: ((_ restoreFocus: Bool) -> Void)?
+    /// Called after the bar has left the window, when `isOpen` is already false.
+    var onClosed: (() -> Void)?
 
     let field = NSTextField(string: "")
     private let label = NSTextField(labelWithString: "Go to line")
@@ -72,8 +74,9 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
 
     /// Pins the bar across the top of `container` and focuses the field, filled with `initialText`
     /// and selected, so typing replaces it (CodeMirror pre-fills the current line number too).
-    func open(in container: NSView, initialText: String) {
-        if superview !== container {
+    func open(in container: NSView, initialText: String, slideDuration: TimeInterval = 0) {
+        let isNew = superview !== container
+        if isNew {
             removeFromSuperview()
             translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(self)
@@ -82,6 +85,16 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
                 trailingAnchor.constraint(equalTo: container.trailingAnchor),
                 topAnchor.constraint(equalTo: container.topAnchor),
             ])
+        }
+        if isNew, slideDuration > 0 {
+            container.layoutSubtreeIfNeeded()
+            // Slides down from above the window's edge, over whatever the top of the window held.
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = bounds.height
+            slide.toValue = 0
+            slide.duration = slideDuration
+            slide.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer?.add(slide, forKey: "slideDown")
         }
         isClosing = false
         field.stringValue = initialText
@@ -102,6 +115,7 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
         // resulting end-editing notification finds the bar already closing).
         onClose?(restoreFocus)
         removeFromSuperview()
+        onClosed?()
     }
 
     override func layout() {
