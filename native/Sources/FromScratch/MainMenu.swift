@@ -4,13 +4,16 @@ import AppKit
 /// and action comes from the `CommandSpec`s it is given.
 @MainActor
 enum MainMenu {
-    static func build(from specs: [CommandSpec]) -> NSMenu {
+    /// `schemeMenuDelegate` fills View › Colour Scheme with the schemes each time it opens.
+    static func build(from specs: [CommandSpec], schemeMenuDelegate: NSMenuDelegate? = nil) -> NSMenu {
         let main = NSMenu()
         let app = NSMenu(title: Commands.appName)
         let file = NSMenu(title: "File")
         let edit = NSMenu(title: "Edit")
         let find = NSMenu(title: "Find")
         let view = NSMenu(title: "View")
+        let schemes = NSMenu(title: "Colour Scheme")
+        schemes.delegate = schemeMenuDelegate
         let window = NSMenu(title: "Window")
         var lastGroup: [ObjectIdentifier: Int] = [:]
 
@@ -38,6 +41,13 @@ enum MainMenu {
                     add(holder, to: edit, group: -1)
                 }
                 find.addItem(item)
+            case .colourScheme:
+                if schemes.items.isEmpty {
+                    let holder = NSMenuItem(title: schemes.title, action: nil, keyEquivalent: "")
+                    holder.submenu = schemes
+                    add(holder, to: view, group: spec.group)
+                }
+                schemes.addItem(item)
             }
         }
 

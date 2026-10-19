@@ -182,10 +182,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         lineHeight = layout.lineHeight
         updateOverlayStyles()
         layoutEditor()
+        // The band's height and fades follow the font.
+        textView.needsDisplay = true
     }
 
-    /// Colours this task needs to render: surface, text, caret. Selection and the current-line band
-    /// are Task 10.
+    /// Surface, text, caret, selection and the current-line band. Colours the scheme file declares
+    /// keep their declared space; the ones derived from it are sRGB, as the palette maths is.
     private func applyScheme() {
         let scheme = model.scheme
         let palette = scheme.palette
@@ -195,6 +197,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         textView.insertionPointColor = scheme.colors.cursor.map { NSColor(declared: $0) }
             ?? NSColor(srgb: palette.cursor)
         textView.typingAttributes[.foregroundColor] = text
+        // --selection and --selected-text: the scheme's Selection and Selected Text colours, else a
+        // mix toward the text and the text colour itself (derivePalette).
+        textView.selectedTextAttributes = [
+            .backgroundColor: scheme.colors.selection.map { NSColor(declared: $0) } ?? NSColor(srgb: palette.selection),
+            .foregroundColor: NSColor(declared: scheme.colors.selectedText ?? scheme.colors.foreground),
+        ]
+        textView.activeLineColor = NSColor(srgb: palette.activeLine)
+        textView.highlightsCurrentLine = model.settings.highlightCurrentLine
         updateOverlayStyles()
     }
 
@@ -427,6 +437,43 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         guard !ranges.isEmpty else { return }
         textView.selectedRanges = ranges
         NSLog("FROMSCRATCH_DEBUG selected %@; %@", spec, debugState())
+    }
+
+    /// One line describing the scheme, colours (with their colour spaces), font and band, plus
+    /// the band's rendered alpha at its left edge and middle (drawn offscreen with cacheDisplay).
+    func debugAppearance() -> String {
+        func describe(_ color: Any?) -> String {
+            guard let color = color as? NSColor else { return "-" }
+            var components = [CGFloat](repeating: 0, count: color.numberOfComponents)
+            color.getComponents(&components)
+            return "\(color.colorSpace.localizedName ?? "?")(\(components.map { String(format: "%.3f", $0) }.joined(separator: ",")))"
+        }
+        let bands = textView.currentLineBandRects()
+        var rendered = "-"
+        if let band = bands.first, let rep = textView.bitmapImageRepForCachingDisplay(in: textView.bounds) {
+            textView.cacheDisplay(in: textView.bounds, to: rep)
+            let scale = CGFloat(rep.pixelsWide) / textView.bounds.width
+            func alpha(_ x: CGFloat) -> String {
+                let c = rep.colorAt(x: Int(x * scale), y: Int(band.midY * scale))
+                return c.map { String(format: "%.3f", $0.alphaComponent) } ?? "?"
+            }
+            rendered = "edge=\(alpha(band.minX + 0.5)) middle=\(alpha(band.midX))"
+        }
+        let style = textView.defaultParagraphStyle
+        return """
+            scheme=\(model.scheme.id) stored=\(model.settings.colorSchemeId) isDark=\(model.scheme.isDark) \
+            appAppearance=\(NSApp.appearance?.name.rawValue ?? "-") \
+            windowAppearance=\(window?.effectiveAppearance.name.rawValue ?? "-") \
+            surface=\(describe(surfaceView.color)) text=\(describe(textView.textColor)) \
+            cursor=\(describe(textView.insertionPointColor)) \
+            selection=\(describe(textView.selectedTextAttributes[.backgroundColor])) \
+            selectedText=\(describe(textView.selectedTextAttributes[.foregroundColor])) \
+            activeLine=\(describe(textView.activeLineColor)) highlight=\(textView.highlightsCurrentLine) \
+            bands=\(bands.map { NSStringFromRect($0) }) bandAlpha[\(rendered)] \
+            font=\(textView.font?.fontName ?? "-") \(textView.font?.pointSize ?? 0)pt \
+            lineHeight=\(style?.minimumLineHeight ?? 0)/\(style?.maximumLineHeight ?? 0) \
+            inset=\(NSStringFromSize(textView.textContainerInset))
+            """
     }
 
     /// One line describing what the checks look at.

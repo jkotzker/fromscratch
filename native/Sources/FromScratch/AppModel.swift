@@ -24,11 +24,22 @@ final class AppModel {
         Self.applyAppearance(for: scheme)
     }
 
-    /// Makes `scheme` the one on screen. Persisting a choice is the caller's job (the scheme menu,
-    /// Task 10); launch applies the resolved scheme without writing it back.
+    /// Makes `scheme` the one on screen. Persisting a choice is SchemeController.select(id:)'s job;
+    /// launch and reload apply the resolved scheme without writing it back.
     func apply(scheme: Scheme) {
         self.scheme = scheme
         Self.applyAppearance(for: scheme)
+        notify()
+    }
+
+    /// Stores the editor font and redraws everything that uses it.
+    func setFont(_ font: FontSetting) {
+        settings.font = font
+        notify()
+    }
+
+    func setHighlightCurrentLine(_ on: Bool) {
+        settings.highlightCurrentLine = on
         notify()
     }
 

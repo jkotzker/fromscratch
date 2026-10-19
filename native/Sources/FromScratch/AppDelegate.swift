@@ -2,9 +2,12 @@ import AppKit
 import FromScratchCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var model: AppModel?
     private var editor: EditorWindowController?
+    private(set) var schemeController: SchemeController?
+    private(set) var fontController: FontController?
+    private(set) var settingsWindow: SettingsWindowController?
     private var sigtermSource: DispatchSourceSignal?
     /// Set by "Quit Anyway" after a failed save, so the next terminate goes through.
     private var quitDespiteUnsavedText = false
@@ -26,11 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Fonts.registerBundled()
-        NSApp.mainMenu = MainMenu.build(from: Commands.defaults)
 
         let model = AppModel(dataDirectory: directory)
+        attach(model: model)
+        NSApp.mainMenu = MainMenu.build(from: Commands.defaults, schemeMenuDelegate: schemeController)
         let editor = EditorWindowController(model: model)
-        self.model = model
         self.editor = editor
         installTerminationSignalHandler()
 
@@ -43,6 +46,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               editor.textView.textLayoutManager != nil ? "yes" : "no")
         runDebugHooks()
         #endif
+    }
+
+    /// The controllers behind the View menu's scheme and font commands and the Settings window.
+    /// The font controller becomes the font manager's target so font panel choices are stored.
+    func attach(model: AppModel) {
+        self.model = model
+        let schemes = SchemeController(model: model)
+        let fonts = FontController(model: model)
+        schemeController = schemes
+        fontController = fonts
+        NSFontManager.shared.target = fonts
+        settingsWindow = SettingsWindowController(
+            viewModel: SettingsModel(app: model, schemes: schemes, fonts: fonts))
     }
 
     // Closing the window quits, as in v2 (window-all-closed calls app.quit()).
@@ -139,6 +155,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(Commands.repositoryURL.appendingPathComponent("releases"))
     }
 
+    // MARK: Settings and View menu commands
+
+    // Here rather than on the editor so they also work while Settings or the font panel is key.
+    @objc func showSettings(_ sender: Any?) {
+        settingsWindow?.show()
+    }
+
+    @objc func toggleLightDark(_ sender: Any?) {
+        schemeController?.toggleLightDark()
+    }
+
+    @objc func reloadSchemes(_ sender: Any?) {
+        schemeController?.reload()
+    }
+
+    @objc func openThemesFolder(_ sender: Any?) {
+        schemeController?.openThemesFolder()
+    }
+
+    @objc func toggleHighlightCurrentLine(_ sender: Any?) {
+        guard let model else { return }
+        model.setHighlightCurrentLine(!model.settings.highlightCurrentLine)
+    }
+
+    @objc func increaseFontSize(_ sender: Any?) {
+        fontController?.increaseFontSize()
+    }
+
+    @objc func decreaseFontSize(_ sender: Any?) {
+        fontController?.decreaseFontSize()
+    }
+
+    @objc func resetFontSize(_ sender: Any?) {
+        fontController?.resetFontSize()
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(toggleHighlightCurrentLine(_:)):
+            // The checkbox reads the setting each time the menu opens, so a change made in
+            // Settings shows here without the menu being told.
+            menuItem.state = model?.settings.highlightCurrentLine == true ? .on : .off
+            return model != nil
+        case #selector(showSettings(_:)), #selector(toggleLightDark(_:)), #selector(reloadSchemes(_:)),
+             #selector(openThemesFolder(_:)), #selector(increaseFontSize(_:)), #selector(decreaseFontSize(_:)),
+             #selector(resetFontSize(_:)):
+            return model != nil
+        default:
+            return true
+        }
+    }
+
     #if DEBUG
     /// Launch checks without GUI access, run 0.5 s after launch in this order:
     /// - `FROMSCRATCH_DEBUG_APPEND=<text>` appends that text through the typing path.
@@ -153,6 +221,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - `FROMSCRATCH_DEBUG_THEN=terminate` then sends the action ⌘Q sends (`terminate:`), `=close`
     ///   sends the window the action ⌘W sends (`performClose:`), and `=zoom-close` zooms the
     ///   window, waits 1 s, then closes it.
+    /// - `FROMSCRATCH_DEBUG_SETTINGS=<step>|<step>...` (after the commands, before the keys), each
+    ///   step followed by a log of the scheme, colours, band, font and Settings state:
+    ///   `scheme:<id>` (SchemeController.select), `schemes:all` (every scheme in turn),
+    ///   `highlight:on|off` (the Settings toggle's binding), `menu:<title>` (the main-menu item
+    ///   with that title, sent as a click would be), `font:<PostScript name>:<size>` (as if picked
+    ///   in the font panel), `trait:bold` (the font manager's Bold, delivered through
+    ///   `changeFont:` to its target), `settings:open`, `settings:press:<label>` (presses the
+    ///   control with that accessibility label in the Settings window), `select:<loc,len>`,
+    ///   `choose-font` (Settings › Choose…), `reload`, `log`.
     /// `FROMSCRATCH_DEBUG_ACTIVATE=1` first activates the app and makes the window key (it takes
     /// focus from the frontmost app). `FROMSCRATCH_DEBUG_MENU=1` then logs every menu item with its shortcut and whether it is
     /// enabled. Each step logs the text, selection and undo name with the prefix `FROMSCRATCH_DEBUG`.
@@ -160,7 +237,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let env = ProcessInfo.processInfo.environment
         guard let editor else { return }
         let hookNames = ["FROMSCRATCH_DEBUG_ACTIVATE", "FROMSCRATCH_DEBUG_MENU", "FROMSCRATCH_DEBUG_APPEND",
-                         "FROMSCRATCH_DEBUG_SELECT", "FROMSCRATCH_DEBUG_COMMAND", "FROMSCRATCH_DEBUG_KEYS",
+                         "FROMSCRATCH_DEBUG_SELECT", "FROMSCRATCH_DEBUG_COMMAND", "FROMSCRATCH_DEBUG_SETTINGS",
+                         "FROMSCRATCH_DEBUG_KEYS",
                          "FROMSCRATCH_DEBUG_THEN"]
         guard hookNames.contains(where: { env[$0] != nil }) else { return }
         let then = env["FROMSCRATCH_DEBUG_THEN"]
@@ -185,11 +263,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             for name in (env["FROMSCRATCH_DEBUG_COMMAND"] ?? "").split(separator: " ") {
                 let action = NSSelectorFromString(String(name))
-                let candidates: [AnyObject?] = [editor.textView, editor, editor.window, NSApp]
+                let candidates: [AnyObject?] = [editor.textView, editor, editor.window, NSApp, self]
                 let target = candidates.compactMap { $0 }.first { $0.responds(to: action) }
                 let sent = NSApp.sendAction(action, to: target, from: nil)
                 NSLog("FROMSCRATCH_DEBUG command %@ sent: %@; %@", String(name), sent ? "yes" : "no", editor.debugState())
                 try? await Task.sleep(for: .milliseconds(200))
+            }
+            for step in (env["FROMSCRATCH_DEBUG_SETTINGS"] ?? "").split(separator: "|") {
+                await debugSettingsStep(String(step), editor: editor)
             }
             for key in (env["FROMSCRATCH_DEBUG_KEYS"] ?? "").split(separator: " ") {
                 let route = debugPress(String(key), in: editor)
@@ -216,7 +297,127 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func debugSettingsStep(_ step: String, editor: EditorWindowController) async {
+        let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
+        let (name, argument) = (parts.first ?? "", parts.count > 1 ? parts[1] : "")
+        var note = ""
+        switch name {
+        case "scheme":
+            schemeController?.select(id: argument)
+        case "schemes" where argument == "all":
+            for scheme in model?.schemes.all ?? [] {
+                schemeController?.select(id: scheme.id)
+                try? await Task.sleep(for: .milliseconds(150))
+                NSLog("FROMSCRATCH_DEBUG settings scheme:%@; %@", scheme.id, editor.debugAppearance())
+            }
+            return
+        case "highlight":
+            settingsWindow?.viewModel.highlightCurrentLine = argument == "on"
+        case "menu":
+            if let menu = NSApp.mainMenu, let item = Self.debugMenuItem(titled: argument, in: menu), let action = item.action {
+                let sent = NSApp.sendAction(action, to: item.target, from: item)
+                note = "sent=\(sent)"
+            } else {
+                note = "no item titled \(argument)"
+            }
+        case "font":
+            let pieces = argument.split(separator: ":").map(String.init)
+            if pieces.count == 2, let size = Double(pieces[1]), let font = NSFont(name: pieces[0], size: size) {
+                fontController?.store(font)
+            } else {
+                note = "no font \(argument)"
+            }
+        case "trait" where argument == "bold":
+            let item = NSMenuItem()
+            item.tag = Int(NSFontTraitMask.boldFontMask.rawValue)
+            NSFontManager.shared.addFontTrait(item)
+        case "settings" where argument == "open":
+            showSettings(nil)
+        case "settings" where argument.hasPrefix("press:"):
+            let label = String(argument.dropFirst("press:".count))
+            note = debugPress(label: label)
+        case "reload":
+            schemeController?.reload()
+        case "select":
+            // Moves the caret or selection after launch, so a capture shows whether the old band
+            // was redrawn away.
+            editor.debugSelect(argument)
+        case "choose-font":
+            settingsWindow?.viewModel.chooseFont()
+            let selected = NSFontManager.shared.selectedFont
+            note = "fontPanelVisible=\(NSFontPanel.shared.isVisible) selectedFont=\(selected?.fontName ?? "-") \(selected?.pointSize ?? 0)"
+        default:
+            break
+        }
+        try? await Task.sleep(for: .milliseconds(250))
+        NSLog("FROMSCRATCH_DEBUG settings %@ %@; %@; %@", step, note, editor.debugAppearance(), debugSettingsState())
+    }
+
+    /// The Settings window and View menu as the user would see them.
+    private func debugSettingsState() -> String {
+        var highlightItem = "-"
+        if let menu = NSApp.mainMenu, let item = Self.debugMenuItem(titled: "Highlight Current Line", in: menu) {
+            _ = validateMenuItem(item)
+            highlightItem = item.state == .on ? "on" : "off"
+        }
+        var checkedScheme = "-"
+        if let menu = NSApp.mainMenu, let holder = Self.debugMenuItem(titled: "Colour Scheme", in: menu),
+           let submenu = holder.submenu {
+            submenu.delegate?.menuNeedsUpdate?(submenu)
+            checkedScheme = submenu.items.filter { $0.state == .on }.map(\.title).joined(separator: ",")
+        }
+        let window = settingsWindow?.window
+        let vm = settingsWindow?.viewModel
+        return """
+            menu[highlight=\(highlightItem) checkedScheme=\(checkedScheme)] \
+            settingsWindow[visible=\(window?.isVisible ?? false) title=\(window?.title ?? "-") \
+            frame=\(window.map { NSStringFromRect($0.frame) } ?? "-") resizable=\(window?.styleMask.contains(.resizable) ?? false) \
+            miniaturizable=\(window?.styleMask.contains(.miniaturizable) ?? false)] \
+            settingsModel[scheme=\(vm?.selectedSchemeId ?? "-") font=\(vm?.fontDescription ?? "-") \
+            highlight=\(vm?.highlightCurrentLine ?? false)] \
+            stored[font=\(model.map { "\($0.settings.font)" } ?? "-")] \
+            fontManagerTarget=\(NSFontManager.shared.target === fontController ? "FontController" : "other")
+            """
+    }
+
+    /// Presses the first control in the Settings window whose accessibility label or title
+    /// contains `label`, the way VoiceOver would.
+    private func debugPress(label: String) -> String {
+        guard let root = settingsWindow?.window?.contentView else { return "no settings window" }
+        var found: [String] = []
+        func search(_ element: Any, depth: Int) -> NSAccessibilityProtocol? {
+            guard depth < 30, let element = element as? NSAccessibilityProtocol else { return nil }
+            let role = element.accessibilityRole()?.rawValue ?? ""
+            let text = [element.accessibilityLabel(), element.accessibilityTitle()].compactMap { $0 }.joined(separator: "/")
+            if !text.isEmpty { found.append("\(role):\(text)") }
+            if text.contains(label), [NSAccessibility.Role.button, .checkBox, .popUpButton].map(\.rawValue).contains(role) {
+                return element
+            }
+            for child in element.accessibilityChildren() ?? [] {
+                if let hit = search(child, depth: depth + 1) { return hit }
+            }
+            return nil
+        }
+        guard let hit = search(root, depth: 0) else {
+            return "nothing labelled \(label); saw \(found.joined(separator: " | "))"
+        }
+        let pressed = hit.accessibilityPerformPress()
+        return "pressed \(hit.accessibilityRole()?.rawValue ?? "?") \(label): \(pressed)"
+    }
+
+    private static func debugMenuItem(titled title: String, in menu: NSMenu) -> NSMenuItem? {
+        for item in menu.items {
+            if item.title == title { return item }
+            if let submenu = item.submenu {
+                submenu.delegate?.menuNeedsUpdate?(submenu)
+                if let found = debugMenuItem(titled: title, in: submenu) { return found }
+            }
+        }
+        return nil
+    }
+
     private func debugLogMenu(_ menu: NSMenu, path: String) {
+        menu.delegate?.menuNeedsUpdate?(menu)
         menu.update()
         for item in menu.items where !item.isSeparatorItem {
             let name = path.isEmpty ? item.title : "\(path) > \(item.title)"

@@ -71,6 +71,121 @@ final class EditorTextView: NSTextView {
         textContainer?.lineFragmentPadding = 0
     }
 
+    // MARK: Current-line band
+
+    /// The View › Highlight Current Line setting.
+    var highlightsCurrentLine = false {
+        didSet { if highlightsCurrentLine != oldValue { needsDisplay = true } }
+    }
+
+    /// The scheme's active-line colour (`--bg-1-translucent`), half transparent so the surface
+    /// shows through.
+    var activeLineColor: NSColor = .clear {
+        didSet { if highlightsCurrentLine { needsDisplay = true } }
+    }
+
+    /// `.cm-activeLine` in app.css: drawn behind the text of each logical line holding a caret,
+    /// and only while nothing is selected.
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        let bands = currentLineBandRects().filter { $0.intersects(rect) }
+        guard !bands.isEmpty else { return }
+        // The fades are sized in em so they scale with the type, as in app.css.
+        let em = font?.pointSize ?? CGFloat(FontSetting.defaultSize)
+        let clear = activeLineColor.withAlphaComponent(0)
+        for band in bands where band.width > 0 {
+            // transparent at 0, the colour from 1em to 2em before the right edge, transparent at
+            // 100%. Fading to the same colour at zero alpha is what CSS's premultiplied
+            // interpolation does with --bg-transparent, without a hue shift on the way.
+            let fadeIn = min(em / band.width, 0.5)
+            let fadeOut = max(1 - 2 * em / band.width, fadeIn)
+            NSGradient(colors: [clear, activeLineColor, activeLineColor, clear],
+                       atLocations: [0, fadeIn, fadeOut, 1], colorSpace: activeLineColor.colorSpace)?
+                .draw(in: band, angle: 0)
+        }
+    }
+
+    /// One rect per caret, in view coordinates: the whole paragraph (every wrapped visual line) from
+    /// the text's leading edge to the right edge of the view, which is the `.cm-line` box (the
+    /// right gutter is the line's own padding in v2). Empty when switched off or when any
+    /// selected range is non-empty.
+    func currentLineBandRects() -> [NSRect] {
+        guard highlightsCurrentLine else { return [] }
+        let ranges = selectedRanges.map(\.rangeValue)
+        guard !ranges.isEmpty, ranges.allSatisfy({ $0.length == 0 }) else { return [] }
+        let origin = textContainerOrigin
+        var bands: [NSRect] = []
+        for range in ranges {
+            guard let frame = paragraphFrame(at: range.location) else { continue }
+            let band = NSRect(x: origin.x, y: origin.y + frame.minY,
+                              width: max(bounds.width - origin.x, 0), height: frame.height)
+            if !bands.contains(band) { bands.append(band) }
+        }
+        return bands
+    }
+
+    /// The layout frame of the paragraph holding `offset`, in text container coordinates. Through
+    /// the text layout manager, never the layout manager (TextKit 2 only).
+    private func paragraphFrame(at offset: Int) -> NSRect? {
+        guard let layout = textLayoutManager, let content = textContentStorage,
+              let location = content.location(content.documentRange.location, offsetBy: offset) else { return nil }
+        let text = string as NSString
+        // The end of a paragraph with no line break after it (the end of the note) has no
+        // fragment of its own: it belongs to the paragraph before it.
+        var candidates = [location]
+        if offset > 0, offset <= text.length,
+           !CharacterSet.newlines.contains(UnicodeScalar(text.character(at: offset - 1)) ?? " "),
+           let previous = content.location(location, offsetBy: -1) {
+            candidates.append(previous)
+        }
+        for candidate in candidates {
+            guard let fragment = layout.textLayoutFragment(for: candidate),
+                  fragment.rangeInElement.contains(candidate) else { continue }
+            if fragment.state != .layoutAvailable {
+                layout.ensureLayout(for: fragment.rangeInElement)
+            }
+            return fragment.layoutFragmentFrame
+        }
+        // The empty line after a final line break, and an empty note, have no layout fragment;
+        // the caret's segment still gives that line's frame.
+        var frame: NSRect?
+        layout.enumerateTextSegments(in: NSTextRange(location: location), type: .standard, options: []) { _, rect, _, _ in
+            frame = rect
+            return false
+        }
+        guard var line = frame else { return nil }
+        if let height = defaultParagraphStyle?.minimumLineHeight, height > line.height {
+            line.size.height = height
+        }
+        return line
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        // The band moves with the caret and disappears with a selection. The text itself lives in
+        // TextKit 2's own subviews, so only this view's background is redrawn.
+        if highlightsCurrentLine {
+            setNeedsDisplay(visibleRect)
+        }
+    }
+
+    // MARK: Font panel
+
+    // The font manager's target is the FontController, which stores the choice. Should a choice
+    // reach the text view anyway, it goes there too, so the editor never shows a font that is not
+    // the stored one.
+    override func changeFont(_ sender: Any?) {
+        if let controller = NSFontManager.shared.target as? FontController {
+            controller.changeFont(sender as? NSFontManager)
+        } else {
+            super.changeFont(sender)
+        }
+    }
+
+    @objc func validModesForFontPanel(_ fontPanel: NSFontPanel) -> NSFontPanel.ModeMask {
+        [.collection, .face, .size]
+    }
+
     // MARK: Line commands
 
     @objc func toggleCheckbox(_ sender: Any?) {

@@ -13,15 +13,17 @@ enum CommandID: String, CaseIterable {
     case find, findAndReplace, findNext, findPrevious, useSelectionForFind
     case toggleCheckbox, toggleCheckboxAlternate, deleteLine, moveLineUp, moveLineDown, goToLine
     // View
-    case toggleLightDark, increaseFontSize, increaseFontSizeAlternate, decreaseFontSize, resetFontSize
+    case toggleLightDark, reloadSchemes, openThemesFolder, toggleHighlightCurrentLine
+    case increaseFontSize, increaseFontSizeAlternate, decreaseFontSize, resetFontSize
     case showFonts, toggleFullScreen
     // Window
     case minimize, zoom, bringAllToFront
 }
 
-/// Where a command's menu item goes. `.find` is the Find submenu inside Edit.
+/// Where a command's menu item goes. `.find` is the Find submenu inside Edit; `.colourScheme` is
+/// the Colour Scheme submenu inside View, whose scheme items are added when it opens.
 enum MenuPlacement {
-    case app, file, edit, find, view, window
+    case app, file, edit, find, view, colourScheme, window
 }
 
 /// Who receives the action. Almost everything goes up the responder chain (a nil target); the
@@ -79,9 +81,8 @@ enum Commands {
                     action: #selector(AppDelegate.openSupport(_:)), menu: .app, group: 0),
         CommandSpec(id: .checkForUpdates, title: "Check for Updates…", key: "", modifiers: [],
                     action: #selector(AppDelegate.checkForUpdates(_:)), menu: .app, group: 0),
-        // Implemented by the Settings window (Task 10); disabled until something responds to it.
         CommandSpec(id: .showSettings, title: "Settings…", key: ",", modifiers: [.command],
-                    action: Selector(("showSettings:")), menu: .app, group: 1),
+                    action: #selector(AppDelegate.showSettings(_:)), menu: .app, group: 1),
         CommandSpec(id: .hideApp, title: "Hide \(appName)", key: "h", modifiers: [.command],
                     action: #selector(NSApplication.hide(_:)), menu: .app, group: 3),
         CommandSpec(id: .hideOthers, title: "Hide Others", key: "h", modifiers: [.command, .option],
@@ -131,18 +132,26 @@ enum Commands {
         CommandSpec(id: .goToLine, title: "Go to Line…", key: "g", modifiers: [.control],
                     action: #selector(EditorWindowController.showGoToLine(_:)), menu: .edit, group: 4),
 
-        // View. The light/dark and font-size actions are implemented in Task 10.
+        // View, in v2's order (menu.js): theme toggle, Colour Scheme, highlight, then font size.
         CommandSpec(id: .toggleLightDark, title: "Toggle Light/Dark", key: "i", modifiers: [.command],
-                    action: Selector(("toggleLightDark:")), menu: .view, group: 0),
+                    action: #selector(AppDelegate.toggleLightDark(_:)), menu: .view, group: 0),
+        // Below the scheme items in View › Colour Scheme. No shortcuts, as in v2.
+        CommandSpec(id: .reloadSchemes, title: "Reload Schemes", key: "", modifiers: [],
+                    action: #selector(AppDelegate.reloadSchemes(_:)), menu: .colourScheme, group: 0),
+        CommandSpec(id: .openThemesFolder, title: "Open Themes Folder", key: "", modifiers: [],
+                    action: #selector(AppDelegate.openThemesFolder(_:)), menu: .colourScheme, group: 0),
+        // No shortcut: v2 left it without one, as a setting changed once.
+        CommandSpec(id: .toggleHighlightCurrentLine, title: "Highlight Current Line", key: "", modifiers: [],
+                    action: #selector(AppDelegate.toggleHighlightCurrentLine(_:)), menu: .view, group: 0),
         CommandSpec(id: .increaseFontSize, title: "Increase Font Size", key: "+", modifiers: [.command],
-                    action: Selector(("increaseFontSize:")), menu: .view, group: 1),
+                    action: #selector(AppDelegate.increaseFontSize(_:)), menu: .view, group: 1),
         // The unshifted key, which is what people actually press (v2 menu.js).
         CommandSpec(id: .increaseFontSizeAlternate, title: "Increase Font Size", key: "=", modifiers: [.command],
-                    action: Selector(("increaseFontSize:")), menu: .view, group: 1, isAlternate: true),
+                    action: #selector(AppDelegate.increaseFontSize(_:)), menu: .view, group: 1, isAlternate: true),
         CommandSpec(id: .decreaseFontSize, title: "Decrease Font Size", key: "-", modifiers: [.command],
-                    action: Selector(("decreaseFontSize:")), menu: .view, group: 1),
+                    action: #selector(AppDelegate.decreaseFontSize(_:)), menu: .view, group: 1),
         CommandSpec(id: .resetFontSize, title: "Reset Font Size", key: "0", modifiers: [.command],
-                    action: Selector(("resetFontSize:")), menu: .view, group: 1),
+                    action: #selector(AppDelegate.resetFontSize(_:)), menu: .view, group: 1),
         CommandSpec(id: .showFonts, title: "Show Fonts", key: "t", modifiers: [.command],
                     action: #selector(NSFontManager.orderFrontFontPanel(_:)), menu: .view, group: 2,
                     target: .fontManager),

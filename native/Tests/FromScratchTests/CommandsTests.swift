@@ -71,20 +71,24 @@ struct CommandsTests {
         let view = try #require(main.item(withTitle: "View")?.submenu)
         let showFonts = try #require(view.items.first { $0.action == #selector(NSFontManager.orderFrontFontPanel(_:)) })
         #expect(showFonts.target === NSFontManager.shared)
+        // View › Colour Scheme holds the two scheme commands; the schemes themselves are added
+        // when the menu opens.
+        let schemes = try #require(view.item(withTitle: "Colour Scheme")?.submenu)
+        #expect(schemes.items.map(\.action) == Commands.defaults.filter { $0.menu == .colourScheme }.map(\.action))
+        #expect(view.items.filter { !$0.isHidden }.map { $0.isSeparatorItem ? "-" : $0.title } == [
+            "Toggle Light/Dark", "Colour Scheme", "Highlight Current Line", "-",
+            "Increase Font Size", "Decrease Font Size", "Reset Font Size", "-", "Show Fonts", "-", "Enter Full Screen",
+        ])
     }
 
     /// Catches a misspelt selector: every action in the table must be implemented by something in
-    /// the responder chain, except the ones Task 10 implements (disabled until then).
+    /// the responder chain.
     @Test func everyActionHasAnImplementation() {
-        let pendingTask10: Set<Selector> = [
-            Selector(("toggleLightDark:")), Selector(("increaseFontSize:")), Selector(("decreaseFontSize:")),
-            Selector(("resetFontSize:")), Selector(("showSettings:")),
-        ]
         let responders: [AnyClass] = [
             EditorTextView.self, EditorWindowController.self, AppDelegate.self,
             NSApplication.self, NSWindow.self, NSFontManager.self,
         ]
-        for spec in Commands.defaults where !pendingTask10.contains(spec.action) {
+        for spec in Commands.defaults {
             #expect(responders.contains { $0.instancesRespond(to: spec.action) }, "nothing implements \(spec.action)")
         }
     }
