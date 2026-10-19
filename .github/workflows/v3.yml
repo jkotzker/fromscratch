@@ -1,0 +1,89 @@
+name: v3
+
+# The native macOS build. It lives beside build.yml, which keeps building the
+# Electron 2.x line from master, so the two never share a trigger.
+on:
+  push:
+    branches: [v3]
+    tags: ["v3.*"]
+  pull_request:
+    branches: [v3]
+  workflow_dispatch:
+
+# Read-only by default. Only the release job widens this, so a pull request
+# build never runs with a token that can write to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # macos-26 is Apple Silicon, so the build is native rather than emulated.
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Core tests are pure Swift. The app-layer tests build real AppKit views,
+      # which need a window server. Hosted macOS runners are expected to provide
+      # one, but that is unverified until a CI run confirms it.
+      - name: Test
+        working-directory: native
+        run: swift test
+
+      - name: Build the app
+        run: native/scripts/build-app.sh release
+
+      - name: Check the binary really is arm64
+        run: |
+          BIN=native/build/release/FromScratch.app/Contents/MacOS/FromScratch
+          file "$BIN"
+          lipo -archs "$BIN" | grep -qw arm64
+
+      - name: Package the dmg
+        run: native/scripts/package-dmg.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: FromScratch-v3-arm64-dmg
+          path: native/build/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v3.')
+    runs-on: ubuntu-latest        # only moves files; no macOS tooling needed
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: FromScratch-v3-arm64-dmg
+          path: dist
+
+      # Uses the preinstalled gh CLI rather than a third-party release action,
+      # to keep the workflow's supply chain to first-party code only.
+      # GITHUB_REF_NAME is read as a shell variable rather than interpolated by
+      # Actions, so a crafted tag name cannot inject shell.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.dmg \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Unsigned build for Apple Silicon.
+
+          macOS will refuse to open it on first launch. Sequoia and later removed
+          the Control-click shortcut, so allow it under **System Settings >
+          Privacy & Security**, then press **Open Anyway**.
+
+          Building locally avoids this entirely — an app you build yourself is
+          never quarantined. See the README."

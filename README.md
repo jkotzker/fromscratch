@@ -7,50 +7,54 @@ FromScratch
 
 FromScratch is a little app that you can use as a quick note taking or todo app.
 
+Version 3 is a native macOS rewrite of the same app, written in Swift and AppKit with no web views and no third-party packages. It reads and writes the same `~/.fromscratch/content.txt` as before. The 2.x line, built with Electron, stays on the `master` branch and is the last cross-platform one: v3 runs only on macOS 15 or later, on Apple Silicon.
+
 * Small and simple, the only UI is the text you type
 * Saves on-the-fly, no need to manually save
 * Automatic indenting
-* Note-folding
 * Use checkboxes to keep track of your TODO's
 * Powerful keyboard control
-* Replaces common syntax with symbols, such as arrows
+* Replaces common syntax with symbols, such as arrows, through the ligatures of the bundled Fira Code. They depend on the font, so a different font may not have them
 * Dark and Light theme, plus any colour scheme you drop in as an `.itermcolors` file
 * Any monospace font installed on your machine, at any size
-* Portable mode support
 * Free
 
-> This is a fork of [buzkall/fromscratch](https://github.com/buzkall/fromscratch), which is itself a fork of the original [Kilian/fromscratch](https://github.com/Kilian/fromscratch) by [Kilian Valkhof](https://kilianvalkhof.com). buzkall did the work of getting the app building and running on current macOS; this fork adds an Apple Silicon build pipeline and a new app icon. See [Fork notes](#fork-notes) for what changed at each step.
+Note-folding and portable mode are 2.x features that 3.0 does not include.
+
+> This is a fork of [buzkall/fromscratch](https://github.com/buzkall/fromscratch), which is itself a fork of the original [Kilian/fromscratch](https://github.com/Kilian/fromscratch) by [Kilian Valkhof](https://kilianvalkhof.com). buzkall did the work of getting the app building and running on current macOS; this fork adds an Apple Silicon build pipeline, a new app icon, and the native v3 rewrite. See [Fork notes](#fork-notes) for what changed at each step.
 
 ### Shortcuts
 
-* `f1` - show/hide shortcut overview
-* `cmd/ctrl+up` - move current line up
-* `cmd/ctrl+down` - move current line down
-* `cmd/ctrl+d` - delete current line
-* `cmd/ctrl+z` / `shift+cmd/ctrl+z` - undo / redo
-* `cmd/ctrl+w/q` - close application
-* `cmd/ctrl +/=` - zoom text in
-* `cmd/ctrl -` - zoom text out
-* `cmd/ctrl+0` - reset text size
-* `cmd/ctrl+t` - choose the editor font and size
-* `cmd/ctrl+]/[/k` - fold note collapsing
-* `cmd/ctrl+f` - search (toggle `.*` in the search panel for regular expressions)
-* `shift+cmd/ctrl+f` - replace
-* `shift+cmd/ctrl+r` - replace all
-* `cmd/ctrl+g` - jump to line (you can also use `line:character` notation)
-* `cmd/ctrl+/` or `cmd/ctrl+l` - Add or toggle a checkbox
-* `f11` - Toggle fullscreen
-* `cmd/ctrl+i` - Toggle between light and dark theme
-* `alt` - show or hide menu (Windows only)
-* `cmd/ctrl+s` - ...this does nothing.
+| Shortcut | Action |
+| --- | --- |
+| `cmd+w` | Close the window |
+| `cmd+q` | Quit |
+| `cmd+z` / `shift+cmd+z` | Undo / redo |
+| `cmd+f` | Find |
+| `opt+cmd+f` | Find and replace |
+| `cmd+g` / `shift+cmd+g` | Find next / previous |
+| `cmd+e` | Use selection for find |
+| `cmd+l` or `cmd+/` | Add or toggle a checkbox |
+| `tab` / `shift+tab` | Indent / outdent the selected lines (a tab character when nothing is selected) |
+| `cmd+d` | Delete the current line |
+| `opt+cmd+up` / `opt+cmd+down` | Move the current line up / down |
+| `ctrl+g` | Jump to a line (`line` or `line:character`) |
+| `cmd+i` | Toggle between light and dark theme |
+| `cmd++` or `cmd+=` | Increase the text size |
+| `cmd+-` | Decrease the text size |
+| `cmd+0` | Reset the text size |
+| `cmd+t` | Show the font panel |
+| `ctrl+cmd+f` | Toggle full screen |
+| `cmd+,` | Settings |
+| `cmd+s` | Save now (notes are saved as you type anyway) |
 
 ### Fonts and colour schemes
 
 The **View** menu holds everything configurable:
 
-* **Font…** (`cmd/ctrl+t`) opens a picker listing the monospace families installed on your machine, each name previewed in its own face. Tick *Show all fonts* for the proportional ones too. The size is an absolute pixel value, so `cmd/ctrl +/-` and this field are the same setting
-* **Colour scheme** lists the two built-ins plus every scheme found in `~/.fromscratch/themes`. Drop `.itermcolors` files in there — the format iTerm2, and most terminal-theme galleries, already export — and choose **Reload schemes**. Background, foreground, selection, selected-text and cursor colours are all read from the file and used as given
-* **Highlight current line** turns the cursor-line band on or off
+* **Show Fonts** (`cmd+t`) opens the system font panel. The size is an absolute value, so `cmd +/-` and the panel are the same setting
+* **Colour Scheme** lists the two built-ins plus every scheme found in `~/.fromscratch/themes`. Drop `.itermcolors` files in there — the format iTerm2, and most terminal-theme galleries, already export — and choose **Reload Schemes**, or choose **Open Themes Folder** to get there. Background, foreground, selection, selected-text and cursor colours are all read from the file and used as given
+* **Highlight Current Line** turns the cursor-line band on or off
 
 Settings live in `~/.fromscratch/settings.json` and can be edited by hand:
 
@@ -62,89 +66,48 @@ Settings live in `~/.fromscratch/settings.json` and can be edited by hand:
 }
 ```
 
-Older installs are migrated automatically. FromScratch used to write one file per setting; those files are read once, folded into `settings.json`, and then left alone, so downgrading loses nothing.
+Settings from 2.x are read as they are, and the older one-file-per-setting layout is migrated automatically.
 
-## Development
+## Building
 
-`package.json` allows Node 20.19+. `.nvmrc` pins **24**, which is what CI builds against.
-
-```sh
-# Install dependencies
-npm install
-
-# Run in development (hot reloading renderer, devtools open)
-npm run dev
-
-# Build without packaging
-npm run build
-
-# Build and package a macOS arm64 .dmg into release/
-npm run package:mac
-
-# Lint / format
-npm run lint
-npm run format
-```
-
-`npm run dev` stores its data in `~/.fromscratch/dev`, so development never touches real notes.
-
-`jsconfig.json` is there purely for editor tooling: it lets a language server resolve imports across files, so “go to definition” and “find references” work. It sets `noEmit` and leaves `checkJs` off — nothing in the build reads it, and the project is plain JavaScript with no TypeScript.
-
-### Installing your build
-
-`npm run dev` runs from source; the app in `/Applications` is a frozen bundle. To pick up source changes there, repackage and copy it over:
+v3 needs macOS 15 or later, Xcode 26 or the matching command line tools, and Swift 6.2. All of it lives in `native/`.
 
 ```sh
-npm run package:mac
-cp -R release/mac-arm64/FromScratch.app /Applications/
+# Run the tests
+cd native && swift test
+
+# Build native/build/release/FromScratch.app
+native/scripts/build-app.sh release
+
+# Package native/build/FromScratch-<version>-arm64.dmg
+native/scripts/package-dmg.sh
 ```
 
-Quit the app first, and don't run it alongside `npm run dev` — both write the same `~/.fromscratch/content.txt`.
+`build-app.sh` also takes `debug`. Copy the app to `/Applications` to install it, after quitting any copy that is running.
 
-The `fromscratch` Homebrew cask no longer exists, but if you installed it years ago the old bundle may still be around and will collide with this one on the same file name. Remove it if so:
+### Where the data lives
 
-```sh
-brew uninstall --cask fromscratch
-```
+Release builds keep everything in `~/.fromscratch`: `content.txt` for the text, `settings.json` for the settings, and `themes/` for colour schemes. Debug builds use `~/.fromscratch/dev` instead, so development never touches real notes. In a debug build only, the `FROMSCRATCH_DATA_DIR` environment variable points the app at any other folder; release builds ignore it.
 
-Builds are **unsigned**: they run fine when built and used locally. If a build ever gets quarantined (for instance after being downloaded), clear it with:
+### Unsigned builds
+
+Builds are **unsigned**: an app you build locally is never quarantined, so it opens normally. A dmg downloaded from a release is quarantined, and macOS Sequoia and later removed the Control-click shortcut for that. Open the app once, then go to System Settings → Privacy & Security and press **Open Anyway**. If you prefer the terminal:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/FromScratch.app
 ```
 
-Signing and notarizing would need a paid Apple Developer Program membership ($99/year) for a Developer ID Application certificate — a free Apple ID gets a Personal Team, which cannot issue one and cannot notarize. On the build side electron-builder 26 handles it natively: set `mac.identity`, `mac.hardenedRuntime` and `mac.notarize` in `electron-builder.yml`. No `@electron/notarize` afterSign hook is needed any more. Electron additionally needs the `com.apple.security.cs.allow-jit` and `allow-unsigned-executable-memory` entitlements to launch under the hardened runtime.
-
-### Command Line Arguments
-**Portable Mode**
-`--portable`
-
-Lets you store all the files FromScratch generates in a specified location, such as a USB-stick or other portable storage device. In this mode both the configuration files as well as your text content will be stored in a "userdata" directory alongside the FromScratch executable, or when given a directory as an argument, will store the files there.
-
-You can also use this to store the FromScratch configuration files, and the text content, in a synced cloud storage folder.
-
-```
-# run FromScratch in portable mode, saving data in application directory.
-fromscratch --portable
-```
-
-```
-# run FromScratch in portable mode, saving data in custom directory.
-fromscratch --portable ~/fromscratch_data
-```
-**help**
-`-h, --help`
-
-Prints help information
+Signing and notarizing would need a paid Apple Developer Program membership ($99/year) for a Developer ID Application certificate — a free Apple ID gets a Personal Team, which cannot issue one and cannot notarize.
 
 ### FAQ
+
 *Where is my data saved?*
 
-Your data is saved in a plain text file content.txt. On Mac and Linux, this file is saved in ~/.fromscratch. On Windows this file is saved in a directory called ".fromscratch" in your userprofile directory.
+In a plain text file, `~/.fromscratch/content.txt`.
 
-*Can my data be saved in an alternate directory?*
+*Can I still build the Electron version?*
 
-Yes! See the **portable mode** section under the **Command Line Arguments** heading above.
+Yes, from the `master` branch, which holds the 2.x sources and their own build instructions.
 
 ## Fork notes
 
@@ -171,19 +134,22 @@ The on-disk format is unchanged: `~/.fromscratch/content.txt` plus the settings 
 * Layered SVGs are included for **Icon Composer**, so the Liquid Glass `.icon` for macOS 26 can be assembled without redrawing anything. That step needs Tahoe 26.4 and Xcode 26, so only the `.icns` is built here
 * **Configurable font and colour schemes** — a font picker over the locally installed families, and colour schemes loaded from `.itermcolors` files. Replaces the old light theme, which was a CSS `invert()` filter over the dark one, with real palettes derived from each scheme's own colours
 * **Settings in one JSON file** at `~/.fromscratch/settings.json`, migrated from the per-key files the app used to write
-* **GitHub Actions workflow** building and linting on every push, and publishing an arm64 `.dmg` to a GitHub release on `v*` tags
+* **GitHub Actions workflow** building and linting on every push, and publishing an arm64 `.dmg` to a GitHub release on `v2.*` tags
+* **Version 3** is a native Swift and AppKit rewrite of the app, built by its own workflow (`v3.yml`) and released from `v3.*` tags. 2.x on `master` is the last cross-platform line
 * App id is `com.jkotzker.fromscratch`, and the repository, issue, release and update-check URLs point at this fork
 
 Releases are **unsigned** — there is no paid Apple Developer account behind this fork. A dmg you download will be quarantined, and macOS Sequoia and later removed the Control-click shortcut for that, so it has to be allowed under System Settings → Privacy & Security. Building locally avoids the problem entirely, since an app you build yourself is never quarantined.
 
 ### Credits
 
-FromScratch is built upon these open source projects:
+The 2.x line is built upon these open source projects:
 	<a href="https://electronjs.org">Electron</a>,
 	<a href="https://react.dev">React</a>,
 	<a href="https://github.com/tonsky/FiraCode">Fira Code</a>,
-	<a href="https://codemirror.net">CodeMirror</a> and
+	<a href="https://codemirror.net">CodeMirror</a>, and
 	<a href="https://github.com/chentsulin/electron-react-boilerplate">Electron-react-boilerplate</a>.
+
+Version 3 bundles <a href="https://github.com/tonsky/FiraCode">Fira Code</a> and otherwise uses only Apple's frameworks.
 
 Original app by [@kilianvalkhof](https://kilianvalkhof.com). Thanks to @bittersweet for helping set up IPC to work around a particularly nasty bug, @chentsulin for the electron-react-boilerplate, and @ctrauma for the portable bits.
 
