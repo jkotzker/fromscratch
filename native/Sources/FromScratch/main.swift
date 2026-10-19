@@ -5,5 +5,6 @@ MainActor.assumeIsolated {
     let delegate = AppDelegate()
     app.delegate = delegate
     app.setActivationPolicy(.regular)
-    app.run()
+    // NSApplication.delegate is weak; nothing else would keep the delegate alive while the app runs.
+    withExtendedLifetime(delegate) { app.run() }
 }

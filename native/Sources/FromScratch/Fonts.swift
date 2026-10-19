@@ -19,13 +19,13 @@ enum Fonts {
         // SPM resources are not used for the app target: the build script copies the font into
         // Contents/Resources. `swift run` has no bundle, so the system monospaced font stands in.
         guard let url = Bundle.main.url(forResource: bundledPostScriptName, withExtension: "otf") else {
-            NSLog("\(bundledPostScriptName).otf is not in the app bundle; using the system monospaced font")
+            NSLog("%@", "\(bundledPostScriptName).otf is not in the app bundle; using the system monospaced font")
             return
         }
         var error: Unmanaged<CFError>?
         if !CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
             let reason = error.map { String(describing: $0.takeRetainedValue()) } ?? "unknown error"
-            NSLog("Could not register \(url.lastPathComponent): \(reason)")
+            NSLog("%@", "Could not register \(url.lastPathComponent): \(reason)")
         }
     }
 

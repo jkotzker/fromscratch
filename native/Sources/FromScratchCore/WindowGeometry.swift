@@ -14,8 +14,12 @@ public enum WindowGeometry {
         flipY(electron, primaryHeight: primaryHeight)
     }
 
+    /// Rounded to whole points: Electron's getBounds() returns integers, so a rolled-back v2 reads
+    /// back only values it could have written itself.
     public static func electronBounds(appKit: CGRect, primaryHeight: CGFloat) -> CGRect {
-        flipY(appKit, primaryHeight: primaryHeight)
+        let r = flipY(appKit, primaryHeight: primaryHeight)
+        return CGRect(x: r.origin.x.rounded(), y: r.origin.y.rounded(),
+                      width: r.size.width.rounded(), height: r.size.height.rounded())
     }
 
     // Mirrors isOnAConnectedDisplay in src/main/index.js: saved bounds can point at a display that is

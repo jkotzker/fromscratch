@@ -53,6 +53,9 @@ public final class SettingsStore {
     private let debounce: Duration
     private var data: [String: JSONValue] = [:]
     private var timer: Task<Void, Never>?
+    /// A setter ran since the last successful write. flush() writes only then, as v2's
+    /// flushSettings does, so a quit that changed nothing leaves a hand-edited file alone.
+    private var dirty = false
     private var fileWritesEnabled = true
 
     public var raw: [String: JSONValue] { data }
@@ -63,20 +66,31 @@ public final class SettingsStore {
         self.debounce = debounce
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        if let existing = Self.readJSON(settingsURL), case .object(let obj) = existing {
-            data = obj
-            return
-        }
-        // Present but unparseable: keep it rather than overwrite it, so it can be recovered by hand.
-        // An earlier backup is never replaced, and if the original cannot be moved aside the file is
-        // left alone for the rest of this run (settings stay in memory only).
         if FileManager.default.fileExists(atPath: settingsURL.path) {
+            let bytes: Data
+            do {
+                bytes = try Data(contentsOf: settingsURL)
+            } catch {
+                // Unreadable (permissions, I/O) is not the same as unparseable: the file may be
+                // fine, so it is neither moved aside nor overwritten. Defaults for this run only,
+                // as ContentStore does for an unreadable note.
+                fileWritesEnabled = false
+                NSLog("%@", "Could not read the settings file; using defaults and not writing settings this run: \(error)")
+                return
+            }
+            if case .object(let obj)? = try? JSONDecoder().decode(JSONValue.self, from: bytes) {
+                data = obj
+                return
+            }
+            // Present but unparseable: keep it rather than overwrite it, so it can be recovered by
+            // hand. An earlier backup is never replaced, and if the original cannot be moved aside
+            // the file is left alone for the rest of this run (settings stay in memory only).
             let backup = Self.backupURL(in: directory)
             do {
                 try FileManager.default.moveItem(at: settingsURL, to: backup)
             } catch {
                 fileWritesEnabled = false
-                NSLog("Could not preserve the unreadable settings file; not writing settings this run: \(error)")
+                NSLog("%@", "Could not preserve the unparseable settings file; not writing settings this run: \(error)")
             }
         }
         data = Self.migrateLegacy(directory)
@@ -153,15 +167,17 @@ public final class SettingsStore {
 
     // MARK: Writing
 
-    /// Writes immediately and cancels any pending debounced write.
+    /// Writes now if a change is pending, and cancels the debounced write.
     public func flush() {
         timer?.cancel()
         timer = nil
+        guard dirty else { return }
         write()
     }
 
     // Like v2, the first change starts the timer and later changes ride on it.
     private func schedule() {
+        dirty = true
         guard timer == nil else { return }
         timer = Task { [debounce] in
             try? await Task.sleep(for: debounce)
@@ -195,10 +211,15 @@ public final class SettingsStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         do {
-            // prettyPrinted uses 2 spaces, matching JSON.stringify(_, null, 2).
-            try encoder.encode(doc).write(to: settingsURL, options: .atomic)
+            // Not byte-identical to v2's JSON.stringify(_, null, 2): keys are sorted and the
+            // separator is " : ". It parses to the same document, which is all v2 needs to read it.
+            // Written to the link's target: v2's writeFileSync followed a symlinked settings.json,
+            // and an atomic write to the link's own path would replace the link with a file.
+            try encoder.encode(doc).write(to: settingsURL.resolvingSymlinksInPath(), options: .atomic)
+            dirty = false
         } catch {
-            NSLog("Could not write settings: \(error)")
+            // Still dirty, so the flush on quit tries again.
+            NSLog("%@", "Could not write settings: \(error)")
         }
     }
 

@@ -135,7 +135,8 @@ struct SettingsStoreTests {
 
     @Test func wholeNumbersEncodeWithoutFraction() throws {
         let dir = tempDir(); put(dir, "settings.json", v2File)
-        let s = SettingsStore(directory: dir); s.flush()
+        // A change is needed: flush writes only what is pending.
+        let s = SettingsStore(directory: dir); s.colorSchemeId = "built-in:dark"; s.flush()
         let text = try String(contentsOf: dir.appendingPathComponent("settings.json"), encoding: .utf8)
         #expect(text.contains("\"width\" : 550,") && !text.contains("550.0"))
     }
@@ -177,5 +178,64 @@ struct SettingsStoreTests {
         var f = FontSetting(); f.family = "FiraCode"
         s.font = f; s.flush()
         #expect(disk(dir)["font"]?.objectValue?["family"] == JSONValue.null)
+    }
+
+    // v2's flushSettings returns early with no write pending, so a hand edit made while the app
+    // runs survives a quit that changed nothing.
+    @Test func flushWithoutChangesLeavesTheFileAlone() throws {
+        let dir = tempDir(); put(dir, "settings.json", v2File)
+        let url = dir.appendingPathComponent("settings.json")
+        let old = Date(timeIntervalSince1970: 1_000_000_000)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        let before = try Data(contentsOf: url)
+        let s = SettingsStore(directory: dir)
+        s.flush()
+        #expect(try Data(contentsOf: url) == before)
+        let mtime = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
+        #expect(mtime == old)
+        // A change after that is still written, and only once.
+        s.highlightCurrentLine = true
+        s.flush()
+        #expect(disk(dir)["highlightCurrentLine"] == .bool(true))
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        s.flush()
+        let again = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
+        #expect(again == old)
+    }
+
+    // v2's writeFileSync followed a symlink; an atomic write must not replace the link with a file.
+    @Test func symlinkedSettingsStaysALink() throws {
+        let dir = tempDir()
+        let elsewhere = tempDir()
+        let target = elsewhere.appendingPathComponent("real-settings.json")
+        try v2File.write(to: target, atomically: true, encoding: .utf8)
+        let link = dir.appendingPathComponent("settings.json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let s = SettingsStore(directory: dir)
+        s.colorSchemeId = "x"
+        s.flush()
+        let attributes = try FileManager.default.attributesOfItem(atPath: link.path)
+        #expect(attributes[.type] as? FileAttributeType == .typeSymbolicLink)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == target.path)
+        let stored = try JSONDecoder().decode([String: JSONValue].self, from: Data(contentsOf: target))
+        #expect(stored["colorScheme"] == .string("x"))
+        #expect(stored["folds2"] != nil)
+    }
+
+    // A read error is not a decode failure: the file may be fine, so it is neither moved aside
+    // nor overwritten, and the app runs on defaults.
+    @Test func unreadableSettingsIsNotMovedOrOverwritten() throws {
+        let dir = tempDir(); put(dir, "settings.json", v2File)
+        let url = dir.appendingPathComponent("settings.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
+        let s = SettingsStore(directory: dir)
+        #expect(s.colorSchemeId == SettingsStore.defaultScheme)
+        s.highlightCurrentLine = true
+        s.flush()
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        #expect(try String(contentsOf: url, encoding: .utf8) == v2File)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names == ["settings.json"])
     }
 }

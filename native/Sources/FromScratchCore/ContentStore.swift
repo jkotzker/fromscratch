@@ -14,6 +14,7 @@ public final class ContentStore {
 
     private let directory: URL
     private let debounce: Duration
+    private let retryDelay: Duration
     private var pending: String?
     private var timer: Task<Void, Never>?
     // Sudden termination is a counted system resource, so it is disabled exactly once per
@@ -28,9 +29,11 @@ public final class ContentStore {
     public private(set) var lastWriteError: (any Error)?
     private var fileURL: URL { directory.appendingPathComponent(Self.fileName) }
 
-    public init(directory: URL, debounce: Duration = .milliseconds(250)) {
+    /// `retryDelay` is how long a failed write waits before trying again on its own.
+    public init(directory: URL, debounce: Duration = .milliseconds(250), retryDelay: Duration = .seconds(2)) {
         self.directory = directory
         self.debounce = debounce
+        self.retryDelay = retryDelay
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let url = directory.appendingPathComponent(Self.fileName)
@@ -51,7 +54,7 @@ public final class ContentStore {
             }
         } catch {
             // Present but unreadable: writing would destroy data we could not see.
-            NSLog("Could not read content: \(error)")
+            NSLog("%@", "Could not read content: \(error)")
             initialText = ""
             isReadOnly = true
         }
@@ -62,8 +65,14 @@ public final class ContentStore {
         pending = text
         beginPending()
         guard timer == nil else { return }
-        timer = Task { [debounce] in
-            try? await Task.sleep(for: debounce)
+        arm(after: debounce)
+    }
+
+    // As in v2, a change arriving while a timer is armed rides on it; after a failed write the
+    // retry timer plays the same part.
+    private func arm(after delay: Duration) {
+        timer = Task {
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
             self.timer = nil
             self.writePending()
@@ -81,11 +90,15 @@ public final class ContentStore {
         guard let text = pending else { return }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try Data(text.utf8).write(to: fileURL, options: .atomic)
+            // v2's writeFileSync followed a symlinked content.txt; an atomic write to the link's
+            // own path would replace the link with a regular file, so write to its target.
+            try Data(text.utf8).write(to: fileURL.resolvingSymlinksInPath(), options: .atomic)
         } catch {
-            // Keep the text pending so a later flush can retry; dropping it would lose the user's work.
-            NSLog("Could not write content: \(error)")
+            // Keep the text pending and try again on our own: with no further typing, nothing
+            // else would write it before quit. Sudden termination stays disabled meanwhile.
+            NSLog("%@", "Could not write content: \(error)")
             lastWriteError = error
+            if timer == nil { arm(after: retryDelay) }
             return
         }
         lastWriteError = nil

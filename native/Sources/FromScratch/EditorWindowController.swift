@@ -1,4 +1,7 @@
 import AppKit
+#if DEBUG
+import CryptoKit
+#endif
 import FromScratchCore
 
 /// The single scratchpad window: vibrancy, the scheme's translucent surface, and the editor.
@@ -44,6 +47,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     /// The frame a zoom is animating to. The animation's intermediate frames are neither the old
     /// frame nor the zoomed one, so nothing is stored until it settles.
     private var zoomTarget: NSRect?
+    /// Called at the end of windowWillClose; the app delegate quits from it.
+    var onClose: (@MainActor () -> Void)?
 
     init(model: AppModel) {
         self.model = model
@@ -59,6 +64,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         // v2 is a single-window app; window tabs would only offer an empty Merge All Windows.
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
+        // The frame comes only from settings.json, as in v2; state restoration would otherwise
+        // reapply a frame of its own after restoreFrame.
+        window.isRestorable = false
         super.init(window: window)
 
         restoreFrame(of: window)
@@ -454,6 +462,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             NSEvent.removeMonitor(escapeMonitor)
             self.escapeMonitor = nil
         }
+        onClose?()
     }
 
     func windowWillEnterFullScreen(_ notification: Notification) {
@@ -549,12 +558,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         return true
     }
 
-    /// One line describing what the checks look at.
+    /// One line describing what the checks look at. The note itself is never logged, even in a
+    /// debug build: its UTF-16 length and the first 16 hex digits of the SHA-256 of its UTF-8
+    /// bytes are enough to compare against an expected text.
     func debugState() -> String {
         let selection = textView.selectedRanges.map { "\($0.rangeValue.location),\($0.rangeValue.length)" }
+        let text = textView.string
+        let digest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         return String(
-            format: "text=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld TextKit2=%@",
-            textView.string.debugDescription, selection.joined(separator: ";"),
+            format: "textLength=%ld textSHA256=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld TextKit2=%@",
+            (text as NSString).length, String(digest.prefix(16)), selection.joined(separator: ";"),
             textView.undoManager?.undoActionName ?? "-", textView.undoManager?.groupingLevel ?? -1,
             window?.firstResponder.map { String(describing: type(of: $0)) } ?? "-",
             goToLineBar.isOpen ? "open" : "closed",

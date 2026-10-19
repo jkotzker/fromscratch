@@ -79,4 +79,15 @@ struct WindowGeometryTests {
         #expect(WindowGeometry.restoredFrame(
             saved: overlapping, visibleFrames: [Self.primary], primaryHeight: Self.primaryHeight) != nil)
     }
+
+    // Electron's getBounds() returns integers; storing AppKit's fractional frames would hand a
+    // rolled-back v2 values it never wrote.
+    @Test func electronBoundsAreWholeNumbers() {
+        let appKit = CGRect(x: 10.4, y: 630.6, width: 550.5, height: 449.49)
+        let b = WindowGeometry.electronBounds(appKit: appKit, primaryHeight: Self.primaryHeight)
+        #expect(b == CGRect(x: 10, y: 0, width: 551, height: 449))
+        for value in [b.origin.x, b.origin.y, b.size.width, b.size.height] {
+            #expect(value == value.rounded())
+        }
+    }
 }

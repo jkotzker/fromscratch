@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var sigtermSource: DispatchSourceSignal?
     /// Set by "Quit Anyway" after a failed save, so the next terminate goes through.
     private var quitDespiteUnsavedText = false
+    /// What closing the editor asks for. Tests replace it, since terminating would end the run.
+    var requestTermination: @MainActor () -> Void = { NSApp.terminate(nil) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
@@ -25,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
-            NSLog("Could not create the data folder \(directory.path): \(error)")
+            NSLog("%@", "Could not create the data folder \(directory.path): \(error)")
         }
 
         Fonts.registerBundled()
@@ -34,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         attach(model: model)
         NSApp.mainMenu = MainMenu.build(from: Commands.defaults, schemeMenuDelegate: schemeController)
         let editor = EditorWindowController(model: model)
-        self.editor = editor
+        install(editor: editor)
         installTerminationSignalHandler()
 
         editor.show()
@@ -61,9 +63,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             viewModel: SettingsModel(app: model, schemes: schemes, fonts: fonts))
     }
 
-    // Closing the window quits, as in v2 (window-all-closed calls app.quit()).
+    func install(editor: EditorWindowController) {
+        self.editor = editor
+        editor.onClose = { [weak self] in self?.editorDidClose() }
+    }
+
+    // Closing the window quits, as in v2 (window-all-closed calls app.quit()). AppKit's
+    // last-window rule would not fire while Settings or the font panel is open, leaving an app
+    // with no editor and no way back, so closing the editor asks to quit directly. A run-loop
+    // block, not a main-queue block, for the reason given in applicationShouldTerminate.
+    private func editorDidClose() {
+        RunLoop.main.perform(inModes: [.default]) { [weak self] in
+            MainActor.assumeIsolated { self?.requestTermination() }
+        }
+    }
+
+    // Off: editorDidClose already asks to quit, and a second request after a failed save would
+    // show the save-failed alert twice.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
     }
 
     // ⌘Q, the Dock's Quit, logout and restart all arrive here. ContentStore disables sudden

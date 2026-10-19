@@ -110,4 +110,40 @@ struct ContentStoreTests {
         #expect(store.suddenTerminationBalance == 0)
         #expect(disk(dir) == Data("keep".utf8))
     }
+
+    // v2's writeFileSync followed a symlink; an atomic write must not replace the link with a file.
+    @Test func symlinkedContentStaysALink() throws {
+        let dir = tempDir()
+        let elsewhere = tempDir()
+        let target = elsewhere.appendingPathComponent("real-content.txt")
+        try Data("old".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: file(dir), withDestinationURL: target)
+        let store = ContentStore(directory: dir)
+        #expect(store.initialText == "old")
+        store.scheduleWrite("new")
+        store.flush()
+        let attributes = try FileManager.default.attributesOfItem(atPath: file(dir).path)
+        #expect(attributes[.type] as? FileAttributeType == .typeSymbolicLink)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: file(dir).path) == target.path)
+        #expect(try Data(contentsOf: target) == Data("new".utf8))
+    }
+
+    @Test func failedTimerWriteRetriesOnItsOwn() async throws {
+        let dir = tempDir()
+        let store = ContentStore(directory: dir, debounce: .milliseconds(10), retryDelay: .milliseconds(100))
+        // A directory at the target path makes the atomic rename fail.
+        try FileManager.default.createDirectory(at: file(dir), withIntermediateDirectories: true)
+        store.scheduleWrite("keep")
+        try await eventually { store.lastWriteError != nil }
+        #expect(store.lastWriteError != nil)
+        #expect(store.hasPendingWrite)
+        #expect(store.suddenTerminationBalance == 1)
+        try FileManager.default.removeItem(at: file(dir))
+        // No flush and no new text: the retry alone must land it.
+        try await eventually { !store.hasPendingWrite }
+        #expect(!store.hasPendingWrite)
+        #expect(store.lastWriteError == nil)
+        #expect(store.suddenTerminationBalance == 0)
+        #expect(disk(dir) == Data("keep".utf8))
+    }
 }
