@@ -126,7 +126,7 @@ final class EditorTextView: NSTextView {
 
     /// The layout frame of the paragraph holding `offset`, in text container coordinates. Through
     /// the text layout manager, never the layout manager (TextKit 2 only).
-    private func paragraphFrame(at offset: Int) -> NSRect? {
+    func paragraphFrame(at offset: Int) -> NSRect? {
         guard let layout = textLayoutManager, let content = textContentStorage,
               let location = content.location(content.documentRange.location, offsetBy: offset) else { return nil }
         let text = string as NSString

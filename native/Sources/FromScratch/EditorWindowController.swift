@@ -12,6 +12,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     static let minimumSize = NSSize(width: 300, height: 200)
 
     // `.cm-content` padding is 3rem 0 4rem; `.cm-gutters` and `.cm-line` padding-right are 5vw.
+    // The top inset is measured from the window's top edge, titlebar included.
     static let topInset: CGFloat = 48
     static let bottomInset: CGFloat = 64
     static let horizontalInsetFraction: CGFloat = 0.05
@@ -30,7 +31,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
     private let model: AppModel
     private let surfaceView = SurfaceView()
-    private let scrollView = NSScrollView()
+    let scrollView = EditorScrollView()
+    let dragStrip = TitlebarDragView()
     let textView = EditorTextView(usingTextLayoutManager: true)
     private let goToLineBar = GoToLineBar()
     private(set) var updateBar: UpdateNoticeBar?
@@ -141,10 +143,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
-        // The text runs under the transparent titlebar; the 3rem top inset keeps it clear, as in v2.
+        // The text scrolls under the transparent titlebar, but the scroll view's top inset is the
+        // titlebar's height (layoutEditor), so the find bar, which NSScrollView places just below
+        // that inset, opens under the traffic lights rather than behind them. Set by hand from
+        // contentLayoutRect rather than automatically, so the text inset can be derived from the
+        // same number in the same pass.
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets()
         effect.addSubview(scrollView)
+        scrollView.onFindBarChange = { [weak self] in self?.layoutEditor() }
+        // Above the text; the go-to-line strip and the update bar are added later, so above it.
+        dragStrip.attach(to: effect)
+        dragStrip.excludedRects = { [weak self] in self?.findBarRect(in: self?.dragStrip).map { [$0] } ?? [] }
 
         let contentSize = scrollView.contentSize
         textView.configureForPlainText()
@@ -298,19 +308,59 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         updateBar = nil
     }
 
-    /// Insets that depend on the window size: the 5vw gutters and the scroll-past-end space.
+    /// The height of the titlebar band at the top of the full-size content view: the part
+    /// `contentLayoutRect` leaves out. 0 in full screen, where the titlebar is hidden.
+    static func titlebarHeight(of window: NSWindow) -> CGFloat {
+        guard let content = window.contentView else { return 0 }
+        let layout = content.convert(window.contentLayoutRect, from: nil)
+        return max(0, content.bounds.maxY - layout.maxY)
+    }
+
+    /// Insets that depend on the window: the titlebar, the 5vw gutters and the scroll-past-end space.
     private func layoutEditor() {
         guard let window else { return }
-        let visibleHeight = scrollView.contentSize.height
-        // Scroll past the end: the last line can be scrolled up to the top of the view. The CSS
-        // bottom padding still applies when the window is too short for that to exceed it.
-        let bottom = max(Self.bottomInset, visibleHeight - lineHeight)
-        // Fill the visible area so a click below the last line still lands in the editor. Set
-        // first: setInsets resizes the view to fit, which honours minSize.
-        textView.minSize = NSSize(width: 0, height: visibleHeight)
+        let titlebar = Self.titlebarHeight(of: window)
+        if scrollView.contentInsets.top != titlebar {
+            scrollView.contentInsets = NSEdgeInsets(top: titlebar, left: 0, bottom: 0, right: 0)
+        }
+        // NSScrollView lays the find bar over the document, just below the top inset (measured:
+        // with a 60 pt inset it moved to 60 pt and still covered the text). The text moves down
+        // by the bar's height instead, so no line hides behind it.
+        let findBar = findBarHeight
+        // The clip view still spans the whole window; the inset only offsets the document.
+        let fullHeight = scrollView.contentSize.height
+        // Scroll past the end: the last line can be scrolled up to the top of the window, as
+        // before the titlebar inset. The CSS bottom padding still applies when the window is too
+        // short for that to exceed it.
+        let bottom = max(Self.bottomInset, fullHeight - lineHeight)
+        // Fill the area below the titlebar so a click below the last line still lands in the
+        // editor. Set first: setInsets resizes the view to fit, which honours minSize.
+        textView.minSize = NSSize(width: 0, height: max(0, fullHeight - titlebar))
+        // The document starts below the titlebar, so the text keeps its 48 pt from the window top.
         textView.setInsets(
-            top: Self.topInset, bottom: bottom,
+            top: max(0, Self.topInset - titlebar) + findBar, bottom: bottom,
             horizontal: (window.frame.width * Self.horizontalInsetFraction).rounded())
+    }
+
+    private var findBarHeight: CGFloat {
+        guard scrollView.isFindBarVisible, let bar = scrollView.findBarView, !bar.isHidden else { return 0 }
+        return bar.frame.height
+    }
+
+    /// The find bar's frame in `view`'s coordinates, while it is showing.
+    func findBarRect(in view: NSView?) -> NSRect? {
+        guard let view, scrollView.isFindBarVisible, let bar = scrollView.findBarView, bar.superview != nil,
+              !bar.isHidden else { return nil }
+        return view.convert(bar.bounds, from: bar)
+    }
+
+    /// Where the first line's top edge is, measured down from the window's top edge.
+    func firstLineTopFromWindowTop() -> CGFloat? {
+        guard let window, let content = window.contentView, let frame = textView.paragraphFrame(at: 0) else {
+            return nil
+        }
+        let top = NSPoint(x: 0, y: textView.textContainerOrigin.y + frame.minY)
+        return content.bounds.maxY - content.convert(top, from: textView).y
     }
 
     // MARK: Commands
@@ -469,6 +519,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         fullScreenActive = true
     }
 
+    // The titlebar band disappears in full screen and returns on exit; the insets follow it.
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        layoutEditor()
+    }
+
     func windowDidFailToEnterFullScreen(_ window: NSWindow) {
         fullScreenActive = false
     }
@@ -484,6 +539,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     func windowDidExitFullScreen(_ notification: Notification) {
         fullScreenActive = false
         fullScreenExiting = false
+        layoutEditor()
         storeWindowState()
     }
 
@@ -551,6 +607,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             """
     }
 
+    /// The view a click would reach on the close button and in the middle of the window at 10, 35
+    /// and 45 pt from the top.
+    func debugHits() -> String {
+        guard let content = window?.contentView, let frame = window?.contentView?.superview else { return "-" }
+        // 20,14 is the close button.
+        let points = [(20.0, 14.0), (content.bounds.midX, 10.0), (content.bounds.midX, 35.0), (content.bounds.midX, 45.0)]
+        return points.map { x, fromTop in
+            // The frame view is the root, so hitTest takes window coordinates.
+            let point = content.convert(NSPoint(x: x, y: content.bounds.maxY - fromTop), to: nil)
+            let hit = frame.hitTest(point).map { String(describing: type(of: $0)) } ?? "nil"
+            return "\(Int(x)),\(Int(fromTop)):\(hit)"
+        }.joined(separator: ",")
+    }
+
     /// Clicks the update bar's ×, as a user would; false when no bar is showing.
     func debugDismissUpdate() -> Bool {
         guard let bar = updateBar else { return false }
@@ -566,16 +636,34 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         let text = textView.string
         let digest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         return String(
-            format: "textLength=%ld textSHA256=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld TextKit2=%@",
+            format: "textLength=%ld textSHA256=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld fullScreen=%@ collectionBehavior=%lu titlebar=%.1f firstLineTop=%.1f findBar=%@ insets=%.1f clipY=%.1f hits=%@ TextKit2=%@",
             (text as NSString).length, String(digest.prefix(16)), selection.joined(separator: ";"),
             textView.undoManager?.undoActionName ?? "-", textView.undoManager?.groupingLevel ?? -1,
             window?.firstResponder.map { String(describing: type(of: $0)) } ?? "-",
             goToLineBar.isOpen ? "open" : "closed",
             (window?.contentView?.subviews.compactMap { ($0 as? OverlayNotice)?.text } ?? []).debugDescription,
             updateBar.map { "shown(\($0.version))" } ?? "none", window?.windowNumber ?? 0,
+            window?.styleMask.contains(.fullScreen) == true ? "yes" : "no", window?.collectionBehavior.rawValue ?? 0,
+            window.map(Self.titlebarHeight(of:)) ?? -1, firstLineTopFromWindowTop() ?? -1,
+            findBarRect(in: window?.contentView).map { "\(NSStringFromRect($0)) fromTop=\((window?.contentView?.bounds.maxY ?? 0) - $0.maxY)" } ?? "hidden",
+            scrollView.contentInsets.top, scrollView.contentView.bounds.origin.y, debugHits(),
             textView.textLayoutManager != nil ? "yes" : "no")
     }
     #endif
+}
+
+/// Tells the editor when the find bar opens, closes or changes height, so the insets can follow it.
+final class EditorScrollView: NSScrollView {
+    var onFindBarChange: (() -> Void)?
+
+    override var isFindBarVisible: Bool {
+        didSet { if isFindBarVisible != oldValue { onFindBarChange?() } }
+    }
+
+    override func findBarViewDidChangeHeight() {
+        super.findBarViewDidChangeHeight()
+        onFindBarChange?()
+    }
 }
 
 /// The editor surface: the scheme background at `--bg-translucent` alpha over the vibrancy.

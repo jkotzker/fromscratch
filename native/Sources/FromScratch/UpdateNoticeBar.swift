@@ -35,7 +35,7 @@ final class UpdateNoticeBar: NSView {
         didSet { applyStyle() }
     }
 
-    private let label: NSTextField
+    let label: NSTextField
     private let closeButton = CloseButton()
     private var isHovered = false
 
@@ -59,7 +59,8 @@ final class UpdateNoticeBar: NSView {
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.textLeading),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.textTrailing),
             label.bottomAnchor.constraint(equalTo: bottomAnchor),
-            label.heightAnchor.constraint(equalToConstant: Self.lineHeight),
+            // Gives way to the titlebar constraint in attach(to:).
+            label.heightAnchor.constraint(equalToConstant: Self.lineHeight).withPriority(.defaultHigh),
             closeButton.widthAnchor.constraint(equalToConstant: Self.closeDiameter),
             closeButton.heightAnchor.constraint(equalToConstant: Self.closeDiameter),
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.closeTrailing),
@@ -78,14 +79,20 @@ final class UpdateNoticeBar: NSView {
         fatalError("init(coder:) is not used")
     }
 
-    /// Pins the bar across the top of `container`.
+    /// Pins the bar across the top of `container`. The bar's tint still runs up behind the
+    /// traffic lights, as v2's did, but the text starts below the titlebar: NSTextField draws from
+    /// the top of its frame, so in the 32 pt line the text sat level with the buttons.
     func attach(to container: NSView) {
         container.addSubview(self)
-        NSLayoutConstraint.activate([
+        var constraints = [
             leadingAnchor.constraint(equalTo: container.leadingAnchor),
             trailingAnchor.constraint(equalTo: container.trailingAnchor),
             topAnchor.constraint(equalTo: container.topAnchor),
-        ])
+        ]
+        if let titlebarBottom = (container.window?.contentLayoutGuide as? NSLayoutGuide)?.topAnchor {
+            constraints.append(label.topAnchor.constraint(greaterThanOrEqualTo: titlebarBottom))
+        }
+        NSLayoutConstraint.activate(constraints)
     }
 
     /// Runs the click action, for the accessibility press and the launch checks.
@@ -132,6 +139,13 @@ final class UpdateNoticeBar: NSView {
         // `--overlay-bg-hover` is 0.15 ink against 0.1 at rest.
         let alpha = isHovered ? min(1, style.background.alphaComponent * 1.5) : style.background.alphaComponent
         layer?.backgroundColor = style.background.withAlphaComponent(alpha).cgColor
+    }
+}
+
+private extension NSLayoutConstraint {
+    func withPriority(_ priority: NSLayoutConstraint.Priority) -> NSLayoutConstraint {
+        self.priority = priority
+        return self
     }
 }
 

@@ -35,6 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let model = AppModel(dataDirectory: directory)
         attach(model: model)
         NSApp.mainMenu = MainMenu.build(from: Commands.defaults, schemeMenuDelegate: schemeController)
+        #if DEBUG
+        // The View menu as soon as it is installed: AppKit has already rewritten the full-screen
+        // item by then (FROMSCRATCH_DEBUG_MENU logs the whole menu later).
+        let installedViewMenu = ProcessInfo.processInfo.environment["FROMSCRATCH_DEBUG_MENU"] != nil
+            ? NSApp.mainMenu?.item(withTitle: "View")?.submenu?.items ?? [] : []
+        for item in installedViewMenu where !item.isSeparatorItem {
+            NSLog("FROMSCRATCH_DEBUG installed View > %@ | key %@ mods %lu | item %p", item.title,
+                  item.keyEquivalent.debugDescription, item.keyEquivalentModifierMask.rawValue, item)
+        }
+        #endif
         let editor = EditorWindowController(model: model)
         install(editor: editor)
         installTerminationSignalHandler()
@@ -235,7 +245,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// - `FROMSCRATCH_DEBUG_KEYS=<key> ...` synthesises key-down events: modified keys go through
     ///   the main menu first (the item with that shortcut, dispatched up the responder chain),
     ///   anything else, or a key no menu item takes, to the window. Keys are `cmd+l`, `opt+cmd+up`, `ctrl+g`,
-    ///   `shift+tab`, `return`, `esc`, `tab`, and `text:<characters>` to type characters.
+    ///   `shift+tab`, `return`, `esc`, `tab`, and `text:<characters>` to type characters. A key
+    ///   prefixed `app:` goes to `NSApp.sendEvent` instead (the whole dispatch a real press gets),
+    ///   `menu-pke:` to `NSApp.mainMenu.performKeyEquivalent`; `sleep:<ms>` waits.
     /// - `FROMSCRATCH_DEBUG_THEN=terminate` then sends the action ⌘Q sends (`terminate:`), `=close`
     ///   sends the window the action ⌘W sends (`performClose:`), and `=zoom-close` zooms the
     ///   window, waits 1 s, then closes it.
@@ -292,6 +304,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 await debugSettingsStep(String(step), editor: editor)
             }
             for key in (env["FROMSCRATCH_DEBUG_KEYS"] ?? "").split(separator: " ") {
+                // `sleep:<ms>` waits, e.g. for a full-screen transition to finish.
+                if key.hasPrefix("sleep:"), let ms = Int(key.dropFirst("sleep:".count)) {
+                    try? await Task.sleep(for: .milliseconds(ms))
+                    continue
+                }
                 let route = debugPress(String(key), in: editor)
                 try? await Task.sleep(for: .milliseconds(300))
                 NSLog("FROMSCRATCH_DEBUG key %@ via %@; %@", String(key), route, editor.debugState())
@@ -446,16 +463,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 debugLogMenu(submenu, path: name)
                 continue
             }
-            NSLog("FROMSCRATCH_DEBUG menu %@ | key %@ mods %lu | action %@ | enabled %@%@", name,
+            NSLog("FROMSCRATCH_DEBUG menu %@ | key %@ mods %lu | action %@ | enabled %@%@ | item %p", name,
                   item.keyEquivalent.debugDescription, item.keyEquivalentModifierMask.rawValue,
                   item.action.map(NSStringFromSelector) ?? "-", item.isEnabled ? "yes" : "no",
-                  item.isHidden ? " (hidden)" : "")
+                  item.isHidden ? (item.allowsKeyEquivalentWhenHidden ? " (hidden, key allowed)" : " (hidden)") : "",
+                  item)
         }
     }
 
     /// Delivers one synthetic key press and says which path took it.
     private func debugPress(_ token: String, in editor: EditorWindowController) -> String {
         guard let window = editor.window else { return "no window" }
+        // `app:<key>` hands the event to NSApp.sendEvent, the path a real key press takes after
+        // the window server (key-equivalent dispatch, local monitors, then the window);
+        // `menu-pke:<key>` asks only the main menu, through NSMenu.performKeyEquivalent.
+        for (prefix, viaApp) in [("app:", true), ("menu-pke:", false)] where token.hasPrefix(prefix) {
+            guard let event = Self.debugKeyEvent(token: String(token.dropFirst(prefix.count)), window: window) else {
+                return "no event"
+            }
+            if viaApp {
+                NSApp.sendEvent(event)
+                return "NSApp.sendEvent"
+            }
+            let handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
+            return "NSMenu.performKeyEquivalent (\(handled ? "handled" : "not handled"))"
+        }
         if token.hasPrefix("text:") {
             for character in token.dropFirst(5) {
                 if let event = Self.debugKeyEvent(characters: String(character), ignoring: String(character),
@@ -465,48 +497,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             return "window (typed)"
         }
-        var parts = token.split(separator: "+").map(String.init)
-        let base = parts.removeLast()
-        var modifiers: NSEvent.ModifierFlags = []
-        for part in parts {
-            switch part {
-            case "cmd": modifiers.insert(.command)
-            case "opt": modifiers.insert(.option)
-            case "ctrl": modifiers.insert(.control)
-            case "shift": modifiers.insert(.shift)
-            default: return "unknown modifier \(part)"
-            }
-        }
-        let named: [String: (String, UInt16)] = [
-            "return": ("\r", 36), "esc": ("\u{1b}", 53), "tab": ("\t", 48),
-            "up": (String(UnicodeScalar(NSUpArrowFunctionKey)!), 126),
-            "down": (String(UnicodeScalar(NSDownArrowFunctionKey)!), 125),
-            "right": (String(UnicodeScalar(NSRightArrowFunctionKey)!), 124),
-        ]
-        let keyCodes: [String: UInt16] = [
-            "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "q": 12,
-            "w": 13, "e": 14, "t": 17, "=": 24, "-": 27, "0": 29, "i": 34, "l": 37, ",": 43, "/": 44, "m": 46,
-        ]
-        var characters: String
-        var keyCode: UInt16
-        if let (chars, code) = named[base] {
-            characters = chars
-            keyCode = code
-        } else {
-            characters = base
-            keyCode = keyCodes[base] ?? 0
-        }
-        if ["up", "down", "right"].contains(base) { modifiers.formUnion([.numericPad, .function]) }
-        if modifiers.contains(.shift), base == "tab" { characters = "\u{19}" }  // back-tab, as AppKit reports it
-        else if modifiers.contains(.shift) { characters = characters.uppercased() }
-        let ignoring = characters
-        // Real events carry the control character for ⌃-letter combinations.
-        if modifiers.contains(.control), let scalar = characters.unicodeScalars.first, scalar.isASCII,
-           scalar.properties.isAlphabetic {
-            characters = String(UnicodeScalar(UInt8(scalar.value & 0x1f)))
-        }
-        guard let event = Self.debugKeyEvent(characters: characters, ignoring: ignoring, modifiers: modifiers,
-                                             keyCode: keyCode, window: window) else { return "no event" }
+        guard let event = Self.debugKeyEvent(token: token, window: window) else { return "no event" }
+        let modifiers = event.modifierFlags
         if !modifiers.intersection([.command, .control]).isEmpty, let menu = NSApp.mainMenu,
            let item = Self.debugMenuItem(matching: event, in: menu), let action = item.action {
             // NSMenu.performKeyEquivalent would validate against the key window, which a process
@@ -537,6 +529,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         }
         return nil
+    }
+
+    /// A key-down event for a token such as `ctrl+cmd+f`, `opt+cmd+up` or `return`.
+    private static func debugKeyEvent(token: String, window: NSWindow) -> NSEvent? {
+        var parts = token.split(separator: "+").map(String.init)
+        let base = parts.removeLast()
+        var modifiers: NSEvent.ModifierFlags = []
+        for part in parts {
+            switch part {
+            case "cmd": modifiers.insert(.command)
+            case "opt": modifiers.insert(.option)
+            case "ctrl": modifiers.insert(.control)
+            case "shift": modifiers.insert(.shift)
+            default: return nil
+            }
+        }
+        let named: [String: (String, UInt16)] = [
+            "return": ("\r", 36), "esc": ("\u{1b}", 53), "tab": ("\t", 48),
+            "up": (String(UnicodeScalar(NSUpArrowFunctionKey)!), 126),
+            "down": (String(UnicodeScalar(NSDownArrowFunctionKey)!), 125),
+            "right": (String(UnicodeScalar(NSRightArrowFunctionKey)!), 124),
+        ]
+        let keyCodes: [String: UInt16] = [
+            "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "q": 12,
+            "w": 13, "e": 14, "t": 17, "=": 24, "-": 27, "0": 29, "i": 34, "l": 37, ",": 43, "/": 44, "m": 46,
+        ]
+        var characters: String
+        var keyCode: UInt16
+        if let (chars, code) = named[base] {
+            characters = chars
+            keyCode = code
+        } else {
+            characters = base
+            keyCode = keyCodes[base] ?? 0
+        }
+        if ["up", "down", "right"].contains(base) { modifiers.formUnion([.numericPad, .function]) }
+        if modifiers.contains(.shift), base == "tab" { characters = "\u{19}" }  // back-tab, as AppKit reports it
+        else if modifiers.contains(.shift) { characters = characters.uppercased() }
+        let ignoring = characters
+        // Real events carry the control character for ⌃-letter combinations.
+        if modifiers.contains(.control), let scalar = characters.unicodeScalars.first, scalar.isASCII,
+           scalar.properties.isAlphabetic {
+            characters = String(UnicodeScalar(UInt8(scalar.value & 0x1f)))
+        }
+        return debugKeyEvent(characters: characters, ignoring: ignoring, modifiers: modifiers,
+                             keyCode: keyCode, window: window)
     }
 
     private static func debugKeyEvent(characters: String, ignoring: String, modifiers: NSEvent.ModifierFlags,

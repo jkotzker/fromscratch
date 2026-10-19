@@ -155,7 +155,10 @@ enum Commands {
         CommandSpec(id: .showFonts, title: "Show Fonts", key: "t", modifiers: [.command],
                     action: #selector(NSFontManager.orderFrontFontPanel(_:)), menu: .view, group: 2,
                     target: .fontManager),
-        // AppKit retitles this item "Exit Full Screen" while the window is in full screen.
+        // AppKit retitles this item "Exit Full Screen" while the window is in full screen. On
+        // macOS 15 it also gives it the Globe-F shortcut when the menu is installed and adds a
+        // hidden ⌃⌘F twin that still answers the key (measured with the debug menu log), so the
+        // View menu shows one item and both shortcuts work.
         CommandSpec(id: .toggleFullScreen, title: "Enter Full Screen", key: "f", modifiers: [.control, .command],
                     action: #selector(NSWindow.toggleFullScreen(_:)), menu: .view, group: 3),
 
