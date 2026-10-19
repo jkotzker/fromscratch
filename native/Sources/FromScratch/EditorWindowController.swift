@@ -19,15 +19,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     static let tabWidthInSpaces: CGFloat = 4
 
     static let readOnlyNotice = "This note isn't valid UTF-8, so FromScratch opened it read-only to protect it."
+    // The `.nosave` hint in App.jsx, shown for 1 s after ⌘S.
+    static let savedNotice = "Already saved! ;)"
+    static let savedNoticeDuration: TimeInterval = 1
+    static let saveFailedNotice = "Could not save your note."
+    static let saveFailedNoticeDuration: TimeInterval = 2
 
     private let model: AppModel
     private let surfaceView = SurfaceView()
     private let scrollView = NSScrollView()
     let textView = EditorTextView(usingTextLayoutManager: true)
-    private var notice: NoticeView?
+    private let goToLineBar = GoToLineBar()
+    private var escapeMonitor: Any?
     private var lineHeight: CGFloat = 20
     /// From willEnter until didExit: full screen is not persisted, as in v2.
     private var fullScreenActive = false
+    /// From willExit until didExit, so a second Esc during the animation does not re-enter.
+    private var fullScreenExiting = false
     /// Set once the window closes: quitting follows, and a closed window's frame no longer says
     /// whether it was zoomed, so the state stored at close must not be overwritten.
     private var didClose = false
@@ -62,6 +70,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
         // After the frame is restored, so restoring it does not count as a user move.
         window.delegate = self
+        configureGoToLineBar()
+        installEscapeMonitor()
 
         #if DEBUG
         assert(textView.textLayoutManager != nil, "The editor fell back to TextKit 1")
@@ -145,16 +155,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         textView.string = model.content.initialText
         guard model.content.isReadOnly, let content = window?.contentView else { return }
         textView.isEditable = false
-        let notice = NoticeView(text: Self.readOnlyNotice)
-        notice.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(notice)
-        // Placed like `.nosave.active` in app.css: centred, 0.5rem above the bottom edge.
-        NSLayoutConstraint.activate([
-            notice.centerXAnchor.constraint(equalTo: content.centerXAnchor),
-            notice.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -8),
-            notice.leadingAnchor.constraint(greaterThanOrEqualTo: content.leadingAnchor, constant: 8),
-        ])
-        self.notice = notice
+        OverlayNotice.show(Self.readOnlyNotice, in: content, duration: nil)
     }
 
     // MARK: Appearance
@@ -179,9 +180,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         typing[.paragraphStyle] = style
         textView.typingAttributes = typing
         lineHeight = layout.lineHeight
-        // `.nosave` inherits the body font at the 16px root size.
-        notice?.font = Fonts.font(for: FontSetting(family: model.settings.font.family, size: 16,
-                                                   face: model.settings.font.face))
+        updateOverlayStyles()
         layoutEditor()
     }
 
@@ -196,7 +195,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         textView.insertionPointColor = scheme.colors.cursor.map { NSColor(declared: $0) }
             ?? NSColor(srgb: palette.cursor)
         textView.typingAttributes[.foregroundColor] = text
-        notice?.apply(background: NSColor(srgb: palette.overlayBackground), text: NSColor(srgb: palette.overlayText))
+        updateOverlayStyles()
+    }
+
+    /// The notice and the go-to-line strip use the overlay colours. `.nosave` inherits the body
+    /// font at the 16px root size; the goto-line panel inherits the editor's font and size.
+    private func updateOverlayStyles() {
+        let scheme = model.scheme
+        let palette = scheme.palette
+        let overlayBackground = NSColor(srgb: palette.overlayBackground)
+        let overlayText = NSColor(srgb: palette.overlayText)
+        let setting = model.settings.font
+        OverlayNotice.style = OverlayNotice.Style(
+            background: overlayBackground, text: overlayText,
+            font: Fonts.font(for: FontSetting(family: setting.family, size: 16, face: setting.face)))
+        goToLineBar.style = GoToLineBar.Style(
+            backdrop: NSColor(declared: scheme.colors.background), overlayBackground: overlayBackground,
+            overlayText: overlayText, font: textView.font ?? Fonts.font(for: setting))
     }
 
     /// Insets that depend on the window size: the 5vw gutters and the scroll-past-end space.
@@ -212,6 +227,95 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         textView.setInsets(
             top: Self.topInset, bottom: bottom,
             horizontal: (window.frame.width * Self.horizontalInsetFraction).rounded())
+    }
+
+    // MARK: Commands
+
+    /// ⌘S: the note is saved continuously, so this writes anything still pending and says so.
+    @objc func saveNow(_ sender: Any?) {
+        // A read-only note is never written; its own notice already explains why.
+        guard !model.content.isReadOnly else {
+            NSSound.beep()
+            return
+        }
+        model.content.flush()
+        guard let content = window?.contentView else { return }
+        if model.content.hasPendingWrite {
+            // The write failed and the text is only in memory: do not claim it was saved.
+            NSSound.beep()
+            OverlayNotice.show(Self.saveFailedNotice, in: content, duration: Self.saveFailedNoticeDuration)
+        } else {
+            OverlayNotice.show(Self.savedNotice, in: content, duration: Self.savedNoticeDuration)
+        }
+    }
+
+    /// ⌃G: opens the strip (or refocuses it), pre-filled with the caret's line number.
+    @objc func showGoToLine(_ sender: Any?) {
+        guard let content = window?.contentView else { return }
+        let line = Self.lineNumber(at: textView.selectedRange().location, in: textView.string as NSString)
+        goToLineBar.open(in: content, initialText: String(line))
+    }
+
+    var isGoToLineOpen: Bool { goToLineBar.isOpen }
+
+    private func configureGoToLineBar() {
+        goToLineBar.onCommit = { [weak self] input in
+            guard let self else { return false }
+            guard let target = TextCommands.parseGoToLine(input, text: self.textView.string) else {
+                NSSound.beep()
+                return false
+            }
+            self.textView.setSelectedRange(target)
+            // Only a committed jump scrolls: when the strip closes because a click moved focus,
+            // scrolling would move the text out from under that click.
+            self.textView.scrollRangeToVisible(target)
+            return true
+        }
+        goToLineBar.onClose = { [weak self] restoreFocus in
+            guard let self, restoreFocus else { return }
+            self.window?.makeFirstResponder(self.textView)
+        }
+    }
+
+    /// 1-based line of `location`, counting lines the way `TextCommands.parseGoToLine` does: a
+    /// terminated last line is followed by an empty one.
+    static func lineNumber(at location: Int, in text: NSString) -> Int {
+        var number = 1
+        var start = 0
+        while start < text.length {
+            var end = 0
+            var contentsEnd = 0
+            text.getLineStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: start, length: 0))
+            if location < end || end == contentsEnd { break }
+            number += 1
+            start = end
+        }
+        return number
+    }
+
+    /// Esc leaves full screen, as in v2 (index.js handled it in before-input-event without
+    /// preventing the default). Done before dispatch rather than in `cancelOperation:` because the
+    /// window answers `cancelOperation:` before its controller and the find field consumes Esc, so
+    /// a responder-chain handler is never reached from either.
+    private func installEscapeMonitor() {
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let consumed = MainActor.assumeIsolated { self?.leaveFullScreenOnEscape(event) ?? false }
+            return consumed ? nil : event
+        }
+    }
+
+    /// Returns true when the event should go no further.
+    private func leaveFullScreenOnEscape(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard event.keyCode == 53, modifiers.isEmpty, let window, event.window === window,
+              window.styleMask.contains(.fullScreen), fullScreenActive, !fullScreenExiting else { return false }
+        let responder = window.firstResponder
+        // Esc during input-method composition belongs to the input method.
+        if let editor = responder as? NSTextView, editor.hasMarkedText() { return false }
+        window.toggleFullScreen(nil)
+        // The find field and the go-to-line field still get the key, so they close as well. The
+        // editor has no Esc behaviour of its own, and the window's would act on full screen again.
+        return responder === textView
     }
 
     // MARK: Saving
@@ -270,6 +374,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     func windowWillClose(_ notification: Notification) {
         storeWindowState()
         didClose = true
+        if let escapeMonitor {
+            NSEvent.removeMonitor(escapeMonitor)
+            self.escapeMonitor = nil
+        }
     }
 
     func windowWillEnterFullScreen(_ notification: Notification) {
@@ -280,8 +388,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         fullScreenActive = false
     }
 
+    func windowWillExitFullScreen(_ notification: Notification) {
+        fullScreenExiting = true
+    }
+
+    func windowDidFailToExitFullScreen(_ window: NSWindow) {
+        fullScreenExiting = false
+    }
+
     func windowDidExitFullScreen(_ notification: Notification) {
         fullScreenActive = false
+        fullScreenExiting = false
         storeWindowState()
     }
 
@@ -298,6 +415,31 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
               (text as NSString).length,
               model.content.hasPendingWrite ? "yes" : "no",
               textView.textLayoutManager != nil ? "yes" : "no")
+    }
+
+    /// Sets the selection from `loc,len[;loc,len...]`.
+    func debugSelect(_ spec: String) {
+        let ranges = spec.split(separator: ";").compactMap { part -> NSValue? in
+            let numbers = part.split(separator: ",").compactMap { Int($0) }
+            guard numbers.count == 2 else { return nil }
+            return NSValue(range: NSRange(location: numbers[0], length: numbers[1]))
+        }
+        guard !ranges.isEmpty else { return }
+        textView.selectedRanges = ranges
+        NSLog("FROMSCRATCH_DEBUG selected %@; %@", spec, debugState())
+    }
+
+    /// One line describing what the checks look at.
+    func debugState() -> String {
+        let selection = textView.selectedRanges.map { "\($0.rangeValue.location),\($0.rangeValue.length)" }
+        return String(
+            format: "text=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ TextKit2=%@",
+            textView.string.debugDescription, selection.joined(separator: ";"),
+            textView.undoManager?.undoActionName ?? "-", textView.undoManager?.groupingLevel ?? -1,
+            window?.firstResponder.map { String(describing: type(of: $0)) } ?? "-",
+            goToLineBar.isOpen ? "open" : "closed",
+            (window?.contentView?.subviews.compactMap { ($0 as? OverlayNotice)?.text } ?? []).debugDescription,
+            textView.textLayoutManager != nil ? "yes" : "no")
     }
     #endif
 }
@@ -322,51 +464,5 @@ private final class SurfaceView: NSView {
 
     override func updateLayer() {
         layer?.backgroundColor = color.cgColor
-    }
-}
-
-/// A one-line message in the overlay style (`.nosave` in app.css): 2rem tall, 0.5rem padding and
-/// corner radius, overlay background and text colours.
-private final class NoticeView: NSView {
-    private let label: NSTextField
-    private var background: NSColor = .clear
-
-    var font: NSFont? {
-        get { label.font }
-        set { label.font = newValue }
-    }
-
-    init(text: String) {
-        label = NSTextField(labelWithString: text)
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        label.lineBreakMode = .byTruncatingTail
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        addSubview(label)
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 32),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    func apply(background: NSColor, text: NSColor) {
-        self.background = background
-        label.textColor = text
-        needsDisplay = true
-    }
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = background.cgColor
     }
 }

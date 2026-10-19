@@ -49,7 +49,7 @@ struct ContentStoreTests {
         let store = ContentStore(directory: dir, debounce: .milliseconds(20))
         store.scheduleWrite("one")
         store.scheduleWrite("two")
-        try await Task.sleep(for: .milliseconds(150))
+        try await eventually { !store.hasPendingWrite }
         #expect(disk(dir) == Data("two".utf8))
         #expect(!store.hasPendingWrite)
     }
@@ -88,7 +88,7 @@ struct ContentStoreTests {
         store.flush()                  // nothing pending: no extra enable
         #expect(store.suddenTerminationBalance == 0)
         store.scheduleWrite("c")
-        try await Task.sleep(for: .milliseconds(150))
+        try await eventually { !store.hasPendingWrite }
         #expect(store.suddenTerminationBalance == 0)
         #expect(disk(dir) == Data("c".utf8))
     }

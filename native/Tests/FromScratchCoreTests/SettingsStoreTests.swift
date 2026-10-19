@@ -127,7 +127,7 @@ struct SettingsStoreTests {
         let s = SettingsStore(directory: dir, debounce: .milliseconds(30))
         s.colorSchemeId = "built-in:light"
         #expect(disk(dir)["colorScheme"] == nil)
-        try await Task.sleep(for: .milliseconds(200))
+        try await eventually { disk(dir)["colorScheme"] != nil }
         #expect(disk(dir)["colorScheme"] == .string("built-in:light"))
         s.colorSchemeId = "x"; s.flush()
         #expect(disk(dir)["colorScheme"] == .string("x"))

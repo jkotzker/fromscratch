@@ -20,6 +20,11 @@ let package = Package(
             dependencies: ["FromScratchCore"],
             resources: [.copy("Fixtures")]
         ),
+        // App-layer tests (command table, menus, editor commands) import the executable's module.
+        .testTarget(
+            name: "FromScratchTests",
+            dependencies: ["FromScratch"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -1,4 +1,5 @@
 import AppKit
+import FromScratchCore
 
 /// The scratchpad's text view. Always created with `EditorTextView(usingTextLayoutManager: true)`
 /// and never asked for its `layoutManager`: one such call silently and permanently switches the
@@ -68,5 +69,121 @@ final class EditorTextView: NSTextView {
         drawsBackground = false
         // The text starts at the gutter edge, as `.cm-line` has no left padding in app.css.
         textContainer?.lineFragmentPadding = 0
+    }
+
+    // MARK: Line commands
+
+    @objc func toggleCheckbox(_ sender: Any?) {
+        runLineCommand(Commands.undoName(.toggleCheckbox)) { TextCommands.toggleCheckbox(text: $0, selection: $1) }
+    }
+
+    @objc func deleteLine(_ sender: Any?) {
+        runLineCommand(Commands.undoName(.deleteLine)) { TextCommands.deleteLines(text: $0, selection: $1) }
+    }
+
+    @objc func moveLineUp(_ sender: Any?) {
+        runLineCommand(Commands.undoName(.moveLineUp)) { TextCommands.moveLines(text: $0, selection: $1, direction: .up) }
+    }
+
+    @objc func moveLineDown(_ sender: Any?) {
+        runLineCommand(Commands.undoName(.moveLineDown)) { TextCommands.moveLines(text: $0, selection: $1, direction: .down) }
+    }
+
+    // Tab and ⇧Tab come from the text system's key bindings, not the menu, so they are not in the
+    // command table. An empty selection gets a tab character; a selection indents its lines.
+    override func insertTab(_ sender: Any?) {
+        // Composition (marked text) belongs to the input method, as for Return.
+        guard !isFieldEditor, !hasMarkedText() else { return super.insertTab(sender) }
+        runLineCommand("Indent") { TextCommands.indent(text: $0, selection: $1) }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        guard !isFieldEditor, !hasMarkedText() else { return super.insertBacktab(sender) }
+        runLineCommand("Outdent") { TextCommands.outdent(text: $0, selection: $1) }
+    }
+
+    /// A new line keeps the current line's indentation. Through the typing path, so it coalesces
+    /// with the surrounding typing as a plain Return would. Composition (marked text) and anything
+    /// unusual keep NSTextView's own behaviour.
+    override func insertNewline(_ sender: Any?) {
+        // NSTextView's own Return in a read-only view gives up first responder (measured), which
+        // left a read-only note without keyboard focus; it does nothing here, like the other edits.
+        guard isEditable || isFieldEditor else { return NSSound.beep() }
+        guard !isFieldEditor, !hasMarkedText(), selectedRanges.count == 1 else {
+            return super.insertNewline(sender)
+        }
+        let range = selectedRange()
+        insertText(TextCommands.newlineIndent(text: string, at: range.location), replacementRange: range)
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        switch item.action {
+        case #selector(toggleCheckbox(_:)), #selector(deleteLine(_:)),
+             #selector(moveLineUp(_:)), #selector(moveLineDown(_:)):
+            // Read-only notes must not change, so the commands are unavailable rather than inert.
+            return isEditable
+        default:
+            return super.validateUserInterfaceItem(item)
+        }
+    }
+
+    private func runLineCommand(_ actionName: String, _ command: (String, [NSRange]) -> EditResult?) {
+        guard isEditable, !hasMarkedText() else {
+            NSSound.beep()
+            return
+        }
+        guard let result = command(string, selectedRanges.map(\.rangeValue)) else {
+            NSSound.beep()
+            return
+        }
+        apply(result, actionName: actionName)
+    }
+
+    /// Applies a command's result as one undo step named `actionName`. The edits arrive in
+    /// descending order, so each one leaves the ranges of the ones still to come untouched.
+    func apply(_ result: EditResult, actionName: String) {
+        // An edit that replaces nothing with nothing (Delete Line on an empty note) is no change:
+        // no undo step and no write.
+        let edits = result.edits.filter { $0.range.length > 0 || !$0.replacement.isEmpty }
+        guard !edits.isEmpty else { return }
+        // Through the content storage, never the layout manager (TextKit 2 only).
+        guard let storage = textContentStorage?.textStorage else { return }
+        // NSTextView expects the affected ranges in ascending order, as selectedRanges are.
+        let ascending = edits.reversed()
+
+        // With groupsByEvent, opening a group at level 0 first opens an automatic event group
+        // and nests this one inside it; that group stays open until the run loop closes it, and
+        // when it does not (measured: commands sent from a task, and in tests) several commands
+        // end up in one undo step. Turning it off while the group is open makes this group the
+        // top-level one. Inside an already open group (same event) it nests as any edit would.
+        let undo = undoManager
+        let groupsByEvent = undo?.groupsByEvent ?? false
+        undo?.groupsByEvent = false
+        defer { undo?.groupsByEvent = groupsByEvent }
+        // Keeps the command out of any typing that came before or comes after it.
+        breakUndoCoalescing()
+        undo?.beginUndoGrouping()
+        guard shouldChangeText(inRanges: ascending.map { NSValue(range: $0.range) },
+                               replacementStrings: ascending.map(\.replacement)) else {
+            undo?.endUndoGrouping()
+            NSSound.beep()
+            return
+        }
+        storage.beginEditing()
+        for edit in edits {
+            // The typing attributes carry the editor's font, paragraph style and colour, which
+            // inserted text would otherwise lack in an empty note.
+            storage.replaceCharacters(in: edit.range, with: NSAttributedString(string: edit.replacement, attributes: typingAttributes))
+        }
+        storage.endEditing()
+        didChangeText()
+        undo?.setActionName(actionName)
+        undo?.endUndoGrouping()
+        breakUndoCoalescing()
+
+        if let first = result.selection.first {
+            selectedRanges = result.selection.map { NSValue(range: $0) }
+            scrollRangeToVisible(first)
+        }
     }
 }
