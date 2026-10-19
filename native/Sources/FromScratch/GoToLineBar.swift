@@ -14,9 +14,10 @@ final class GoToLineBar: NSView, NSTextFieldDelegate {
     }
 
     // v2 on macOS: `.cm-panel.cm-dialog` padding 1.75rem on top (clear of the traffic lights) and
-    // 0.5rem below; the field has a 12rem minimum width and 0.15rem 0.4rem padding.
+    // 0.5rem below (v3 uses 0.875rem below, so the field doesn't sit on the strip's bottom edge);
+    // the field has a 12rem minimum width and 0.15rem 0.4rem padding.
     static let topPadding: CGFloat = 28
-    static let bottomPadding: CGFloat = 8
+    static let bottomPadding: CGFloat = 14
     static let fieldMinimumWidth: CGFloat = 192
 
     /// Gets the field's text on Return. Returning false (invalid input) keeps the bar open.

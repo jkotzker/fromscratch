@@ -14,9 +14,12 @@ final class UpdateNoticeBar: NSView {
         var font: NSFont
     }
 
-    // `.updater`: padding-top 2rem on darwin + line-height 2rem, top -1rem.
-    static let height: CGFloat = 48
+    // `.updater`: padding-top 2rem on darwin + line-height 2rem, top -1rem. v3 adds a little room
+    // under the text: with the label pushed below the titlebar, v2's height left it sitting on
+    // the bar's bottom edge.
+    static let height: CGFloat = 56
     static let lineHeight: CGFloat = 32
+    static let textBottom: CGFloat = 8
     // `.updater span`: 1.5rem circle, right 0.5rem, bottom 0.25rem, font-size 1.5rem.
     static let closeDiameter: CGFloat = 24
     static let closeTrailing: CGFloat = 8
@@ -58,13 +61,13 @@ final class UpdateNoticeBar: NSView {
             heightAnchor.constraint(equalToConstant: Self.height),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.textLeading),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.textTrailing),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.textBottom),
             // Gives way to the titlebar constraint in attach(to:).
             label.heightAnchor.constraint(equalToConstant: Self.lineHeight).withPriority(.defaultHigh),
             closeButton.widthAnchor.constraint(equalToConstant: Self.closeDiameter),
             closeButton.heightAnchor.constraint(equalToConstant: Self.closeDiameter),
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.closeTrailing),
-            closeButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.closeBottom),
+            closeButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -(Self.closeBottom + Self.textBottom)),
         ])
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
