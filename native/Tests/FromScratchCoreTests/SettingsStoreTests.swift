@@ -14,9 +14,9 @@ struct SettingsStoreTests {
         try! text.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
     }
 
-    func disk(_ dir: URL) -> [String: JSONValue] {
-        let d = try! Data(contentsOf: dir.appendingPathComponent("settings.json"))
-        return try! JSONDecoder().decode([String: JSONValue].self, from: d)
+    func disk(_ dir: URL) throws -> [String: JSONValue] {
+        let d = try Data(contentsOf: dir.appendingPathComponent("settings.json"))
+        return try JSONDecoder().decode([String: JSONValue].self, from: d)
     }
 
     let v2File = """
@@ -36,20 +36,20 @@ struct SettingsStoreTests {
         #expect(s.hiddenUpdateVersion == "2.2.0")
     }
 
-    @Test func unknownKeysSurviveSave() {
+    @Test func unknownKeysSurviveSave() throws {
         let dir = tempDir()
         put(dir, "settings.json", v2File.replacingOccurrences(of: "\"folds2\"", with: "\"zzz\":[true,1.5,\"x\"],\"folds2\""))
-        let before = disk(dir)
+        let before = try disk(dir)
         let s = SettingsStore(directory: dir)
         s.highlightCurrentLine = true
         s.flush()
-        let after = disk(dir)
+        let after = try disk(dir)
         #expect(after["folds2"] == before["folds2"])
         #expect(after["zzz"] == before["zzz"])
         #expect(after["highlightCurrentLine"] == .bool(true))
     }
 
-    @Test func wrongTypesFallBackAndSurvive() {
+    @Test func wrongTypesFallBackAndSurvive() throws {
         let dir = tempDir()
         put(dir, "settings.json", #"{"font":{"family":"Menlo","size":"big"},"windowstate":null,"colorScheme":5,"keep":1}"#)
         let s = SettingsStore(directory: dir)
@@ -58,7 +58,7 @@ struct SettingsStoreTests {
         #expect(s.colorSchemeId == "built-in:dark")
         s.highlightCurrentLine = false
         s.flush()
-        let d = disk(dir)
+        let d = try disk(dir)
         #expect(d["windowstate"] == JSONValue.null)
         #expect(d["colorScheme"] == .number(5))
         #expect(d["font"]?.objectValue?["size"] == .string("big"))
@@ -70,7 +70,7 @@ struct SettingsStoreTests {
         _ = SettingsStore(directory: dir)
         let kept = try String(contentsOf: dir.appendingPathComponent("settings.json.corrupt"), encoding: .utf8)
         #expect(kept == "{not json")
-        #expect(disk(dir)["version"] == .number(1))
+        #expect(try disk(dir)["version"] == .number(1))
     }
 
     @Test func migratesLegacyWhenNoSettingsJson() {
@@ -97,7 +97,7 @@ struct SettingsStoreTests {
         #expect(s.colorSchemeId == "built-in:dark")
     }
 
-    @Test func fontSizeRoundedAndClamped() {
+    @Test func fontSizeRoundedAndClamped() throws {
         let dir = tempDir()
         let s = SettingsStore(directory: dir)
         for (input, expected) in [(13.6, 14), (200.0, 72), (3.0, 8)] {
@@ -105,32 +105,32 @@ struct SettingsStoreTests {
             f.size = FontSetting.clamp(input)
             s.font = f
             s.flush()
-            #expect(disk(dir)["font"]?.objectValue?["size"] == .number(Double(expected)))
+            #expect(try disk(dir)["font"]?.objectValue?["size"] == .number(Double(expected)))
         }
     }
 
-    @Test func fontFaceIsSeparateKey() {
+    @Test func fontFaceIsSeparateKey() throws {
         let dir = tempDir()
         let s = SettingsStore(directory: dir)
         s.font = FontSetting(family: "Menlo", size: 14, face: "Menlo-Bold")
         s.flush()
-        let d = disk(dir)
+        let d = try disk(dir)
         #expect(d["fontFace"] == .string("Menlo-Bold"))
         #expect(d["font"] == .object(["family": .string("Menlo"), "size": .number(14)]))
         s.font = FontSetting(family: "Menlo", size: 14)
         s.flush()
-        #expect(disk(dir)["fontFace"] == nil)
+        #expect(try disk(dir)["fontFace"] == nil)
     }
 
     @Test func debouncedWriteAndFlushCancels() async throws {
         let dir = tempDir()
         let s = SettingsStore(directory: dir, debounce: .milliseconds(30))
         s.colorSchemeId = "built-in:light"
-        #expect(disk(dir)["colorScheme"] == nil)
-        try await eventually { disk(dir)["colorScheme"] != nil }
-        #expect(disk(dir)["colorScheme"] == .string("built-in:light"))
+        #expect(try disk(dir)["colorScheme"] == nil)
+        try await #require(s.pendingTimer).value
+        #expect(try disk(dir)["colorScheme"] == .string("built-in:light"))
         s.colorSchemeId = "x"; s.flush()
-        #expect(disk(dir)["colorScheme"] == .string("x"))
+        #expect(try disk(dir)["colorScheme"] == .string("x"))
     }
 
     @Test func wholeNumbersEncodeWithoutFraction() throws {
@@ -172,12 +172,12 @@ struct SettingsStoreTests {
         #expect(SettingsStore(directory: dir).font.family == nil)
     }
 
-    @Test func setterNormalizesFiraCode() {
+    @Test func setterNormalizesFiraCode() throws {
         let dir = tempDir()
         let s = SettingsStore(directory: dir)
         var f = FontSetting(); f.family = "FiraCode"
         s.font = f; s.flush()
-        #expect(disk(dir)["font"]?.objectValue?["family"] == JSONValue.null)
+        #expect(try disk(dir)["font"]?.objectValue?["family"] == JSONValue.null)
     }
 
     // v2's flushSettings returns early with no write pending, so a hand edit made while the app
@@ -196,7 +196,7 @@ struct SettingsStoreTests {
         // A change after that is still written, and only once.
         s.highlightCurrentLine = true
         s.flush()
-        #expect(disk(dir)["highlightCurrentLine"] == .bool(true))
+        #expect(try disk(dir)["highlightCurrentLine"] == .bool(true))
         try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
         s.flush()
         let again = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date

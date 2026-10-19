@@ -28,6 +28,9 @@ public final class ContentStore {
     /// Why the most recent write failed; nil once a write succeeds. For telling the user on quit.
     public private(set) var lastWriteError: (any Error)?
     private var fileURL: URL { directory.appendingPathComponent(Self.fileName) }
+    /// The armed debounce or retry timer. Tests await it rather than poll the clock: the timer
+    /// runs on the main actor, which other work can hold for longer than any fixed deadline.
+    var pendingTimer: Task<Void, Never>? { timer }
 
     /// `retryDelay` is how long a failed write waits before trying again on its own.
     public init(directory: URL, debounce: Duration = .milliseconds(250), retryDelay: Duration = .seconds(2)) {

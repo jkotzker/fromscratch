@@ -12,6 +12,8 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct WindowLifecycleTests {
+    init() { silenceFeedback() }
+
     /// attach(model:) makes the font controller the font manager's target, which the manager does
     /// not clear when it is freed; keeping the delegates alive keeps that target valid.
     private static var delegates: [AppDelegate] = []

@@ -22,6 +22,8 @@ private func allItems(in menu: NSMenu) -> [NSMenuItem] {
 
 @MainActor
 struct CommandsTests {
+    init() { silenceFeedback() }
+
     @Test func noDuplicateShortcuts() {
         var seen: [Shortcut: CommandID] = [:]
         for spec in Commands.defaults where !spec.key.isEmpty {

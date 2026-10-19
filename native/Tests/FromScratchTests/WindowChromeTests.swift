@@ -8,6 +8,8 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct WindowChromeTests {
+    init() { silenceFeedback() }
+
     private static let text = (1...40).map { "Synthetic line \($0)" }.joined(separator: "\n")
 
     private func makeEditor() throws -> EditorWindowController {

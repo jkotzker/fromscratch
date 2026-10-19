@@ -434,14 +434,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     @objc func saveNow(_ sender: Any?) {
         // A read-only note is never written; its own notice already explains why.
         guard !model.content.isReadOnly else {
-            NSSound.beep()
+            Feedback.beep()
             return
         }
         model.content.flush()
         guard let content = window?.contentView else { return }
         if model.content.hasPendingWrite {
             // The write failed and the text is only in memory: do not claim it was saved.
-            NSSound.beep()
+            Feedback.beep()
             OverlayNotice.show(Self.saveFailedNotice, in: content, duration: Self.saveFailedNoticeDuration)
         } else {
             OverlayNotice.show(Self.savedNotice, in: content, duration: Self.savedNoticeDuration)
@@ -465,7 +465,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         goToLineBar.onCommit = { [weak self] input in
             guard let self else { return false }
             guard let target = TextCommands.parseGoToLine(input, text: self.textView.string) else {
-                NSSound.beep()
+                Feedback.beep()
                 return false
             }
             self.textView.setSelectedRange(target)

@@ -51,7 +51,7 @@ final class SchemeController: NSObject, NSMenuDelegate {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
             NSLog("%@", "Could not create the themes folder \(directory.path): \(error)")
-            NSSound.beep()
+            Feedback.beep()
             return
         }
         openURL(directory)

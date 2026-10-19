@@ -120,6 +120,8 @@ private func close(_ a: [CGFloat], _ b: [CGFloat], tolerance: CGFloat = 0.02) ->
 @MainActor
 @Suite(.serialized)
 struct SchemeControllerTests {
+    init() { silenceFeedback() }
+
     @Test func selectStoresTheIdAndAppliesIt() throws {
         let directory = try dataFolder()
         let model = AppModel(dataDirectory: directory)
@@ -274,6 +276,8 @@ struct SchemeControllerTests {
 @MainActor
 @Suite(.serialized)
 struct CurrentLineBandTests {
+    init() { silenceFeedback() }
+
     private func makeEditor(_ text: String, highlight: Bool = true) throws -> (EditorWindowController, AppModel) {
         let model = AppModel(dataDirectory: try dataFolder())
         model.settings.highlightCurrentLine = highlight
@@ -372,6 +376,8 @@ struct CurrentLineBandTests {
 @MainActor
 @Suite(.serialized)
 struct FontControllerTests {
+    init() { silenceFeedback() }
+
     private func make() throws -> (FontController, AppModel, URL) {
         registerBundledFont()
         let directory = try dataFolder()
@@ -475,6 +481,8 @@ struct FontControllerTests {
 @MainActor
 @Suite(.serialized)
 struct SettingsSyncTests {
+    init() { silenceFeedback() }
+
     /// attach(model:) makes the font controller the font manager's target, which the manager does
     /// not clear when it is freed; keeping the delegates alive keeps that target valid for the
     /// rest of the test run, as the app delegate is for the app's.

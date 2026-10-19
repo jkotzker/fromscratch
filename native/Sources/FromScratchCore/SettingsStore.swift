@@ -60,6 +60,9 @@ public final class SettingsStore {
 
     public var raw: [String: JSONValue] { data }
     private var settingsURL: URL { directory.appendingPathComponent(Self.fileName) }
+    /// The armed debounce timer. Tests await it rather than poll the clock: the timer runs on the
+    /// main actor, which other work can hold for longer than any fixed deadline.
+    var pendingTimer: Task<Void, Never>? { timer }
 
     public init(directory: URL, debounce: Duration = .milliseconds(250)) {
         self.directory = directory

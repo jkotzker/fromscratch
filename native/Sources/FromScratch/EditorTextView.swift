@@ -223,7 +223,7 @@ final class EditorTextView: NSTextView {
     override func insertNewline(_ sender: Any?) {
         // NSTextView's own Return in a read-only view gives up first responder (measured), which
         // left a read-only note without keyboard focus; it does nothing here, like the other edits.
-        guard isEditable || isFieldEditor else { return NSSound.beep() }
+        guard isEditable || isFieldEditor else { return Feedback.beep() }
         guard !isFieldEditor, !hasMarkedText(), selectedRanges.count == 1 else {
             return super.insertNewline(sender)
         }
@@ -244,11 +244,11 @@ final class EditorTextView: NSTextView {
 
     private func runLineCommand(_ actionName: String, _ command: (String, [NSRange]) -> EditResult?) {
         guard isEditable, !hasMarkedText() else {
-            NSSound.beep()
+            Feedback.beep()
             return
         }
         guard let result = command(string, selectedRanges.map(\.rangeValue)) else {
-            NSSound.beep()
+            Feedback.beep()
             return
         }
         apply(result, actionName: actionName)
@@ -281,7 +281,7 @@ final class EditorTextView: NSTextView {
         guard shouldChangeText(inRanges: ascending.map { NSValue(range: $0.range) },
                                replacementStrings: ascending.map(\.replacement)) else {
             undo?.endUndoGrouping()
-            NSSound.beep()
+            Feedback.beep()
             return
         }
         storage.beginEditing()

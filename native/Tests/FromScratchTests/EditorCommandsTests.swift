@@ -39,6 +39,8 @@ private func range(_ location: Int, _ length: Int = 0) -> NSRange { NSRange(loca
 
 @MainActor
 struct EditorCommandsTests {
+    init() { silenceFeedback() }
+
     @Test func checkboxOverSeveralLinesIsOneNamedUndoStep() {
         let h = Harness("a\nb\nc", selection: [range(0, 5)])
         h.textView.toggleCheckbox(nil)
@@ -84,11 +86,11 @@ struct EditorCommandsTests {
             let item = NSMenuItem(title: "", action: action, keyEquivalent: "")
             #expect(!h.textView.validateUserInterfaceItem(item), "\(action) is enabled on a read-only note")
         }
-        // Even sent directly, nothing changes and nothing is recorded.
-        h.textView.toggleCheckbox(nil)
-        h.textView.deleteLine(nil)
-        h.textView.insertTab(nil)
-        h.textView.insertNewline(nil)
+        // Even sent directly, nothing changes and nothing is recorded; each one beeps instead.
+        #expect(beeps { h.textView.toggleCheckbox(nil) } == 1)
+        #expect(beeps { h.textView.deleteLine(nil) } == 1)
+        #expect(beeps { h.textView.insertTab(nil) } == 1)
+        #expect(beeps { h.textView.insertNewline(nil) } == 1)
         #expect(h.textView.string == "a\nb")
         #expect(h.window.firstResponder === h.textView, "Return gave up focus in a read-only note")
         #expect(!h.undoManager.canUndo)
@@ -146,6 +148,8 @@ struct EditorCommandsTests {
 /// The go-to-line strip and ⌘S, through the real window controller on a temporary data folder.
 @MainActor
 struct EditorWindowCommandsTests {
+    init() { silenceFeedback() }
+
     private func makeController(text: String) throws -> (EditorWindowController, URL) {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory
@@ -200,7 +204,7 @@ struct EditorWindowCommandsTests {
         controller.showGoToLine(nil)
         let editor = try #require(window.firstResponder as? NSTextView)
         editor.insertText("x", replacementRange: editor.selectedRange())
-        press("\r", keyCode: 36, in: window)
+        #expect(beeps { press("\r", keyCode: 36, in: window) } == 1)
         #expect(controller.isGoToLineOpen)
     }
 

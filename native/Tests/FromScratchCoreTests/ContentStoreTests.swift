@@ -12,35 +12,35 @@ struct ContentStoreTests {
 
     func file(_ dir: URL) -> URL { dir.appendingPathComponent("content.txt") }
     func put(_ dir: URL, _ bytes: [UInt8]) { try! Data(bytes).write(to: file(dir)) }
-    func disk(_ dir: URL) -> Data { try! Data(contentsOf: file(dir)) }
+    func disk(_ dir: URL) throws -> Data { try Data(contentsOf: file(dir)) }
 
-    @Test func missingFileGivesEmptyText() {
+    @Test func missingFileGivesEmptyText() throws {
         let dir = tempDir()
         let store = ContentStore(directory: dir)
         #expect(store.initialText == "")
         #expect(!store.isReadOnly)
         store.scheduleWrite("hi")
         store.flush()
-        #expect(disk(dir) == Data("hi".utf8))
+        #expect(try disk(dir) == Data("hi".utf8))
     }
 
-    @Test func roundTripIsByteIdentical() {
+    @Test func roundTripIsByteIdentical() throws {
         let dir = tempDir()
         let bytes = Array("a\r\nb\tc 👋🏽 é\u{301}".utf8)
         put(dir, bytes)
         let store = ContentStore(directory: dir)
         store.scheduleWrite(store.initialText)
         store.flush()
-        #expect(disk(dir) == Data(bytes))
+        #expect(try disk(dir) == Data(bytes))
     }
 
-    @Test func flushWritesPendingText() {
+    @Test func flushWritesPendingText() throws {
         let dir = tempDir()
         let store = ContentStore(directory: dir)
         store.scheduleWrite("x")
         #expect(store.hasPendingWrite)
         store.flush()
-        #expect(disk(dir) == Data("x".utf8))
+        #expect(try disk(dir) == Data("x".utf8))
         #expect(!store.hasPendingWrite)
     }
 
@@ -49,12 +49,12 @@ struct ContentStoreTests {
         let store = ContentStore(directory: dir, debounce: .milliseconds(20))
         store.scheduleWrite("one")
         store.scheduleWrite("two")
-        try await eventually { !store.hasPendingWrite }
-        #expect(disk(dir) == Data("two".utf8))
+        try await #require(store.pendingTimer).value
+        #expect(try disk(dir) == Data("two".utf8))
         #expect(!store.hasPendingWrite)
     }
 
-    @Test func invalidUTF8IsReadOnlyAndNeverOverwritten() {
+    @Test func invalidUTF8IsReadOnlyAndNeverOverwritten() throws {
         let dir = tempDir()
         put(dir, [0xff, 0xfe, 0x41])
         let store = ContentStore(directory: dir)
@@ -63,7 +63,7 @@ struct ContentStoreTests {
         store.scheduleWrite("new")
         #expect(!store.hasPendingWrite)
         store.flush()
-        #expect(disk(dir) == Data([0xff, 0xfe, 0x41]))
+        #expect(try disk(dir) == Data([0xff, 0xfe, 0x41]))
         #expect(store.suddenTerminationBalance == 0)
     }
 
@@ -88,12 +88,12 @@ struct ContentStoreTests {
         store.flush()                  // nothing pending: no extra enable
         #expect(store.suddenTerminationBalance == 0)
         store.scheduleWrite("c")
-        try await eventually { !store.hasPendingWrite }
+        try await #require(store.pendingTimer).value
         #expect(store.suddenTerminationBalance == 0)
-        #expect(disk(dir) == Data("c".utf8))
+        #expect(try disk(dir) == Data("c".utf8))
     }
 
-    @Test func failedWriteStaysPendingAndRetries() {
+    @Test func failedWriteStaysPendingAndRetries() throws {
         let dir = tempDir()
         let store = ContentStore(directory: dir)
         // A directory at the target path makes the atomic rename fail.
@@ -108,7 +108,7 @@ struct ContentStoreTests {
         #expect(!store.hasPendingWrite)
         #expect(store.lastWriteError == nil)
         #expect(store.suddenTerminationBalance == 0)
-        #expect(disk(dir) == Data("keep".utf8))
+        #expect(try disk(dir) == Data("keep".utf8))
     }
 
     // v2's writeFileSync followed a symlink; an atomic write must not replace the link with a file.
@@ -134,16 +134,17 @@ struct ContentStoreTests {
         // A directory at the target path makes the atomic rename fail.
         try FileManager.default.createDirectory(at: file(dir), withIntermediateDirectories: true)
         store.scheduleWrite("keep")
-        try await eventually { store.lastWriteError != nil }
+        try await #require(store.pendingTimer).value
         #expect(store.lastWriteError != nil)
         #expect(store.hasPendingWrite)
         #expect(store.suddenTerminationBalance == 1)
         try FileManager.default.removeItem(at: file(dir))
-        // No flush and no new text: the retry alone must land it.
-        try await eventually { !store.hasPendingWrite }
+        // No flush and no new text: the retry alone must land it. The failure armed it, and a
+        // retry that fired before the directory went has armed the next one.
+        try await #require(store.pendingTimer).value
         #expect(!store.hasPendingWrite)
         #expect(store.lastWriteError == nil)
         #expect(store.suddenTerminationBalance == 0)
-        #expect(disk(dir) == Data("keep".utf8))
+        #expect(try disk(dir) == Data("keep".utf8))
     }
 }
