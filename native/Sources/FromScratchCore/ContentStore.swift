@@ -24,6 +24,8 @@ public final class ContentStore {
     private(set) var suddenTerminationBalance = 0
 
     public var hasPendingWrite: Bool { pending != nil }
+    /// Why the most recent write failed; nil once a write succeeds. For telling the user on quit.
+    public private(set) var lastWriteError: (any Error)?
     private var fileURL: URL { directory.appendingPathComponent(Self.fileName) }
 
     public init(directory: URL, debounce: Duration = .milliseconds(250)) {
@@ -83,8 +85,10 @@ public final class ContentStore {
         } catch {
             // Keep the text pending so a later flush can retry; dropping it would lose the user's work.
             NSLog("Could not write content: \(error)")
+            lastWriteError = error
             return
         }
+        lastWriteError = nil
         pending = nil
         endPending()
     }

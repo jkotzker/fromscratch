@@ -101,10 +101,12 @@ struct ContentStoreTests {
         store.scheduleWrite("keep")
         store.flush()
         #expect(store.hasPendingWrite)
+        #expect(store.lastWriteError != nil)
         #expect(store.suddenTerminationBalance == 1)
         try! FileManager.default.removeItem(at: file(dir))
         store.flush()
         #expect(!store.hasPendingWrite)
+        #expect(store.lastWriteError == nil)
         #expect(store.suddenTerminationBalance == 0)
         #expect(disk(dir) == Data("keep".utf8))
     }
