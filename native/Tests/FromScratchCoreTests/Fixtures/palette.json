@@ -1,0 +1,158 @@
+[
+  {
+    "input": {
+      "background": "#002b36",
+      "foreground": "#829696"
+    },
+    "dark": true,
+    "--bg-translucent": "rgba(0, 43, 54, 0.85)",
+    "--bg-1-translucent": "rgba(34, 71, 79, 0.5)",
+    "--selection": "#31545a",
+    "--selected-text": "#829696",
+    "--cursor": "#748a8a",
+    "--overlay-bg": "rgba(255, 255, 255, 0.1)",
+    "--overlay-text": "rgba(255, 255, 255, 0.4)",
+    "--overlay-text-hover": "rgba(255, 255, 255, 0.7)",
+    "--bg": "#002b36",
+    "--text": "#829696"
+  },
+  {
+    "input": {
+      "background": "#fdf6e3",
+      "foreground": "#657b83"
+    },
+    "dark": false,
+    "--bg-translucent": "rgba(253, 246, 227, 0.85)",
+    "--bg-1-translucent": "rgba(213, 214, 202, 0.5)",
+    "--selection": "#c3c7bf",
+    "--selected-text": "#657b83",
+    "--cursor": "#708891",
+    "--overlay-bg": "rgba(0, 0, 0, 0.1)",
+    "--overlay-text": "rgba(0, 0, 0, 0.4)",
+    "--overlay-text-hover": "rgba(0, 0, 0, 0.7)",
+    "--bg": "#fdf6e3",
+    "--text": "#657b83"
+  },
+  {
+    "input": {
+      "background": "#1d1f21",
+      "foreground": "#c5c8c6",
+      "selection": "#373b41",
+      "selectedText": "#ffffff",
+      "cursor": "#c5c8c6"
+    },
+    "dark": true,
+    "--bg-translucent": "rgba(29, 31, 33, 0.85)",
+    "--bg-1-translucent": "rgba(73, 75, 76, 0.5)",
+    "--selection": "#373b41",
+    "--selected-text": "#ffffff",
+    "--cursor": "#c5c8c6",
+    "--overlay-bg": "rgba(255, 255, 255, 0.1)",
+    "--overlay-text": "rgba(255, 255, 255, 0.4)",
+    "--overlay-text-hover": "rgba(255, 255, 255, 0.7)",
+    "--bg": "#1d1f21",
+    "--text": "#c5c8c6"
+  },
+  {
+    "input": {
+      "background": "#fafafa",
+      "foreground": "#383a42"
+    },
+    "dark": false,
+    "--bg-translucent": "rgba(250, 250, 250, 0.85)",
+    "--bg-1-translucent": "rgba(200, 200, 202, 0.5)",
+    "--selection": "#b0b1b4",
+    "--selected-text": "#383a42",
+    "--cursor": "#444650",
+    "--overlay-bg": "rgba(0, 0, 0, 0.1)",
+    "--overlay-text": "rgba(0, 0, 0, 0.4)",
+    "--overlay-text-hover": "rgba(0, 0, 0, 0.7)",
+    "--bg": "#fafafa",
+    "--text": "#383a42"
+  },
+  {
+    "input": {
+      "background": "#000000",
+      "foreground": "#ffffff"
+    },
+    "dark": true,
+    "--bg-translucent": "rgba(0, 0, 0, 0.85)",
+    "--bg-1-translucent": "rgba(66, 66, 66, 0.5)",
+    "--selection": "#616161",
+    "--selected-text": "#ffffff",
+    "--cursor": "#f2f2f2",
+    "--overlay-bg": "rgba(255, 255, 255, 0.1)",
+    "--overlay-text": "rgba(255, 255, 255, 0.4)",
+    "--overlay-text-hover": "rgba(255, 255, 255, 0.7)",
+    "--bg": "#000000",
+    "--text": "#ffffff"
+  },
+  {
+    "input": {
+      "background": "#ffffff",
+      "foreground": "#000000"
+    },
+    "dark": false,
+    "--bg-translucent": "rgba(255, 255, 255, 0.85)",
+    "--bg-1-translucent": "rgba(189, 189, 189, 0.5)",
+    "--selection": "#9e9e9e",
+    "--selected-text": "#000000",
+    "--cursor": "#0d0d0d",
+    "--overlay-bg": "rgba(0, 0, 0, 0.1)",
+    "--overlay-text": "rgba(0, 0, 0, 0.4)",
+    "--overlay-text-hover": "rgba(0, 0, 0, 0.7)",
+    "--bg": "#ffffff",
+    "--text": "#000000"
+  },
+  {
+    "input": {
+      "background": "#757575",
+      "foreground": "#ffffff"
+    },
+    "dark": true,
+    "--bg-translucent": "rgba(117, 117, 117, 0.85)",
+    "--bg-1-translucent": "rgba(153, 153, 153, 0.5)",
+    "--selection": "#a9a9a9",
+    "--selected-text": "#ffffff",
+    "--cursor": "#f2f2f2",
+    "--overlay-bg": "rgba(255, 255, 255, 0.1)",
+    "--overlay-text": "rgba(255, 255, 255, 0.4)",
+    "--overlay-text-hover": "rgba(255, 255, 255, 0.7)",
+    "--bg": "#757575",
+    "--text": "#ffffff"
+  },
+  {
+    "input": {
+      "background": "#767676",
+      "foreground": "#000000"
+    },
+    "dark": false,
+    "--bg-translucent": "rgba(118, 118, 118, 0.85)",
+    "--bg-1-translucent": "rgba(87, 87, 87, 0.5)",
+    "--selection": "#494949",
+    "--selected-text": "#000000",
+    "--cursor": "#0d0d0d",
+    "--overlay-bg": "rgba(0, 0, 0, 0.1)",
+    "--overlay-text": "rgba(0, 0, 0, 0.4)",
+    "--overlay-text-hover": "rgba(0, 0, 0, 0.7)",
+    "--bg": "#767676",
+    "--text": "#000000"
+  },
+  {
+    "input": {
+      "background": "#2b3a67",
+      "foreground": "#e0def4"
+    },
+    "dark": true,
+    "--bg-translucent": "rgba(43, 58, 103, 0.85)",
+    "--bg-1-translucent": "rgba(90, 101, 140, 0.5)",
+    "--selection": "#70789d",
+    "--selected-text": "#e0def4",
+    "--cursor": "#cecbee",
+    "--overlay-bg": "rgba(255, 255, 255, 0.1)",
+    "--overlay-text": "rgba(255, 255, 255, 0.4)",
+    "--overlay-text-hover": "rgba(255, 255, 255, 0.7)",
+    "--bg": "#2b3a67",
+    "--text": "#e0def4"
+  }
+]

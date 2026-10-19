@@ -17,7 +17,8 @@ let package = Package(
         ),
         .testTarget(
             name: "FromScratchCoreTests",
-            dependencies: ["FromScratchCore"]
+            dependencies: ["FromScratchCore"],
+            resources: [.copy("Fixtures")]
         ),
     ],
     swiftLanguageModes: [.v6]
