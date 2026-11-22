@@ -239,7 +239,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         ]
         textView.activeLineColor = NSColor(srgb: palette.activeLine)
         textView.highlightsCurrentLine = model.settings.highlightCurrentLine
-        controlsBacking.tint = NSColor(declared: scheme.colors.background)
+        // The editor's own surface layer, so the pill matches the window around it.
+        controlsBacking.surface = NSColor(declared: scheme.colors.background, alpha: CGFloat(palette.surface.alpha))
         updateOverlayStyles()
     }
 

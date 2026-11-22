@@ -19,10 +19,13 @@ final class WindowControlsBacking: NSView {
 
     private static let buttonTypes: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
 
-    /// The scheme background; the glass is tinted toward it so the pill reads as part of the
-    /// window rather than a grey patch.
-    var tint: NSColor? {
-        didSet { applyTint() }
+    /// The editor surface colour (the scheme background at `--bg-translucent` alpha), laid inside
+    /// the glass. The glass is not tinted: a tint toward a dark background renders near black
+    /// (measured: `#1e1e1e` at 85% drew 0,0,0 against a 34,34,34 window body), while the surface
+    /// over untinted glass repeats the window's own composition (scheme surface over a system
+    /// material) and drew 33,33,33.
+    var surface: NSColor? {
+        didSet { applySurface() }
     }
 
     /// The NSGlassEffectView, once `activate()` has added it.
@@ -76,7 +79,7 @@ final class WindowControlsBacking: NSView {
             glass.style = .regular
             addSubview(glass)
             self.glass = glass
-            applyTint()
+            applySurface()
         }
         reposition()
     }
@@ -121,10 +124,15 @@ final class WindowControlsBacking: NSView {
         return buttons.insetBy(dx: -horizontal, dy: -vertical).integral
     }
 
-    private func applyTint() {
-        if #available(macOS 26, *), let glass = glass as? NSGlassEffectView {
-            glass.tintColor = tint
-        }
+    private func applySurface() {
+        guard #available(macOS 26, *), let glass = glass as? NSGlassEffectView else { return }
+        let fill = glass.contentView ?? {
+            let view = NSView()
+            view.wantsLayer = true
+            glass.contentView = view
+            return view
+        }()
+        fill.layer?.backgroundColor = surface?.cgColor
     }
 
     // The buttons above it and the drag strip around it take every click.

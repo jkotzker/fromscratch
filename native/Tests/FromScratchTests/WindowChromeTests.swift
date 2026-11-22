@@ -400,13 +400,19 @@ struct WindowChromeTests {
     }
 
     @available(macOS 26, *)
-    @Test func controlsBackingIsTintedTowardTheSchemeBackground() throws {
+    @Test func controlsBackingHoldsTheEditorSurfaceInUntintedGlass() throws {
         let editor = try makeEditor()
         editor.controlsBacking.activate()
         let glass = try #require(editor.controlsBacking.subviews.compactMap { $0 as? NSGlassEffectView }.first)
-        #expect(glass.tintColor == NSColor(declared: editor.model.scheme.colors.background))
+        // A tint toward a dark background renders near black; the window's surface does not.
+        #expect(glass.tintColor == nil)
         #expect(glass.style == .regular)
         #expect(glass.cornerRadius == editor.controlsBacking.frame.height / 2)
+        let scheme = editor.model.scheme
+        let surface = NSColor(declared: scheme.colors.background, alpha: CGFloat(scheme.palette.surface.alpha))
+        let fill = try #require(glass.contentView?.layer?.backgroundColor)
+        #expect(fill == surface.cgColor)
+        #expect(fill.alpha < 1)
     }
 
     // MARK: Full screen
