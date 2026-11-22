@@ -33,6 +33,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     private let surfaceView = SurfaceView()
     let scrollView = EditorScrollView()
     let dragStrip = TitlebarDragView()
+    let controlsBacking = WindowControlsBacking()
     let textView = EditorTextView(usingTextLayoutManager: true)
     private let goToLineBar = GoToLineBar()
     private(set) var updateBar: UpdateNoticeBar?
@@ -104,6 +105,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     func show() {
         guard let window else { return }
         showWindow(nil)
+        controlsBacking.activate()
         // v2 maximized after showing (ready-to-show in src/main/index.js); on macOS that is zoom.
         if model.settings.windowState.isMaximized, !window.isZoomed {
             window.zoom(nil)
@@ -161,6 +163,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             self?.syncUpdateBarVisibility()
             self?.layoutEditor()
         }
+        // Above the text and below the drag strip, so the strip keeps the clicks around the pill.
+        controlsBacking.attach(to: effect, in: window)
         // Above the text; the go-to-line strip and the update bar are added later, so above it.
         dragStrip.attach(to: effect)
         dragStrip.excludedRects = { [weak self] in self?.findBarRect(in: self?.dragStrip).map { [$0] } ?? [] }
@@ -235,6 +239,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         ]
         textView.activeLineColor = NSColor(srgb: palette.activeLine)
         textView.highlightsCurrentLine = model.settings.highlightCurrentLine
+        controlsBacking.tint = NSColor(declared: scheme.colors.background)
         updateOverlayStyles()
     }
 
@@ -589,6 +594,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
     func windowWillEnterFullScreen(_ notification: Notification) {
         fullScreenActive = true
+        // The buttons leave with the titlebar; the pill must not stay behind on its own.
+        controlsBacking.isHidden = true
     }
 
     // The titlebar band disappears in full screen and returns on exit; the insets follow it.
@@ -598,6 +605,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
     func windowDidFailToEnterFullScreen(_ window: NSWindow) {
         fullScreenActive = false
+        controlsBacking.reposition()
     }
 
     func windowWillExitFullScreen(_ notification: Notification) {
@@ -612,6 +620,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         fullScreenActive = false
         fullScreenExiting = false
         layoutEditor()
+        controlsBacking.reposition()
         storeWindowState()
     }
 
@@ -708,7 +717,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         let text = textView.string
         let digest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         return String(
-            format: "textLength=%ld textSHA256=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld fullScreen=%@ collectionBehavior=%lu titlebar=%.1f firstLineTop=%.1f findBar=%@ insets=%.1f clipY=%.1f hits=%@ TextKit2=%@",
+            format: "textLength=%ld textSHA256=%@ selection=%@ undo=%@ undoLevel=%ld firstResponder=%@ goToLine=%@ notices=%@ updateBar=%@ windowNumber=%ld fullScreen=%@ collectionBehavior=%lu titlebar=%.1f firstLineTop=%.1f findBar=%@ insets=%.1f clipY=%.1f hits=%@ controlsBacking=%@ TextKit2=%@",
             (text as NSString).length, String(digest.prefix(16)), selection.joined(separator: ";"),
             textView.undoManager?.undoActionName ?? "-", textView.undoManager?.groupingLevel ?? -1,
             window?.firstResponder.map { String(describing: type(of: $0)) } ?? "-",
@@ -719,6 +728,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             window.map(Self.titlebarHeight(of:)) ?? -1, firstLineTopFromWindowTop() ?? -1,
             findBarRect(in: window?.contentView).map { "\(NSStringFromRect($0)) fromTop=\((window?.contentView?.bounds.maxY ?? 0) - $0.maxY)" } ?? "hidden",
             scrollView.contentInsets.top, scrollView.contentView.bounds.origin.y, debugHits(),
+            controlsBacking.isHidden ? "hidden" : NSStringFromRect(controlsBacking.frame),
             textView.textLayoutManager != nil ? "yes" : "no")
     }
     #endif

@@ -299,6 +299,116 @@ struct WindowChromeTests {
         #expect(TitlebarDoubleClickAction.resolve(action: "None", miniaturize: true) == .none)
     }
 
+    // MARK: Window controls backing
+
+    private func buttonFrames(_ editor: EditorWindowController) throws -> [NSRect] {
+        let window = try #require(editor.window)
+        let content = try #require(window.contentView)
+        content.superview?.layoutSubtreeIfNeeded()
+        return try [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { kind in
+            let button = try #require(window.standardWindowButton(kind))
+            return content.convert(button.frame, from: button.superview)
+        }
+    }
+
+    @Test func controlsBackingSurroundsTheTrafficLightsBetweenTheTextAndTheDragStrip() throws {
+        let editor = try makeEditor()
+        let content = try #require(editor.window?.contentView)
+        let backing = editor.controlsBacking
+        #expect(backing.superview === content)
+        let index = { (view: NSView) in content.subviews.firstIndex { $0 === view } ?? -1 }
+        #expect(index(backing) > index(editor.scrollView))
+        #expect(index(backing) < index(editor.dragStrip))
+        // Nothing until the window is shown (show() activates it), and nothing at all before macOS 26.
+        #expect(backing.isHidden)
+        #expect(backing.glass == nil)
+        guard WindowControlsBacking.isSupported else { return }
+        backing.activate()
+        #expect(!backing.isHidden)
+        let frames = try buttonFrames(editor)
+        for frame in frames {
+            #expect(backing.frame.contains(frame), "\(NSStringFromRect(frame)) is outside \(NSStringFromRect(backing.frame))")
+        }
+        let union = frames.dropFirst().reduce(frames[0]) { $0.union($1) }
+        // A pill hugging the row, not a bar across the window.
+        #expect(backing.frame.width <= union.width + 2 * WindowControlsBacking.padding.width + 1)
+        #expect(backing.frame.height <= union.height + 2 * WindowControlsBacking.padding.height + 1)
+        // Clear of the window's top and left edges, and so of its rounded corner.
+        #expect(content.bounds.maxY - backing.frame.maxY >= WindowControlsBacking.edgeMargin - 0.5)
+        #expect(backing.frame.minX >= WindowControlsBacking.edgeMargin - 0.5)
+        if #available(macOS 26, *) {
+            #expect(backing.subviews.contains { $0 is NSGlassEffectView })
+        }
+    }
+
+    @Test func pillPaddingShrinksToKeepClearOfTheWindowEdges() {
+        let bounds = NSRect(x: 0, y: 0, width: 550, height: 450)
+        // Buttons 6 pt below the top and 9 pt from the left, as on macOS 27.
+        let tight = WindowControlsBacking.pillFrame(
+            around: NSRect(x: 9, y: 428, width: 54, height: 16), in: bounds, flipped: false)
+        #expect(tight == NSRect(x: 4, y: 425, width: 64, height: 22))
+        // Plenty of room: the full padding.
+        let roomy = WindowControlsBacking.pillFrame(
+            around: NSRect(x: 20, y: 400, width: 54, height: 16), in: bounds, flipped: false)
+        #expect(roomy == NSRect(x: 13, y: 395, width: 68, height: 26))
+        // Flipped coordinates measure the top gap from minY.
+        let flipped = WindowControlsBacking.pillFrame(
+            around: NSRect(x: 9, y: 6, width: 54, height: 16), in: bounds, flipped: true)
+        #expect(flipped == NSRect(x: 4, y: 3, width: 64, height: 22))
+    }
+
+    @available(macOS 26, *)
+    @Test func controlsBackingTakesNoClicks() throws {
+        let editor = try makeEditor()
+        editor.controlsBacking.activate()
+        let content = try #require(editor.window?.contentView)
+        let pill = editor.controlsBacking.frame
+        // Inside the pill but left of the close button: the drag strip still moves the window.
+        let margin = NSPoint(x: pill.minX + 2, y: pill.midY)
+        let frame = try #require(content.superview)
+        #expect(frame.hitTest(content.convert(margin, to: nil)) === editor.dragStrip)
+        #expect(editor.controlsBacking.hitTest(NSPoint(x: pill.midX, y: pill.midY)) == nil)
+    }
+
+    @available(macOS 26, *)
+    @Test func controlsBackingStaysWithTheButtonsWhenTheWindowResizes() throws {
+        let editor = try makeEditor()
+        editor.controlsBacking.activate()
+        let content = try #require(editor.window?.contentView)
+        let fromTop = content.bounds.maxY - editor.controlsBacking.frame.maxY
+        let minX = editor.controlsBacking.frame.minX
+        editor.window?.setContentSize(NSSize(width: 700, height: 520))
+        #expect(content.bounds.maxY - editor.controlsBacking.frame.maxY == fromTop)
+        #expect(editor.controlsBacking.frame.minX == minX)
+        for frame in try buttonFrames(editor) {
+            #expect(editor.controlsBacking.frame.contains(frame))
+        }
+    }
+
+    @available(macOS 26, *)
+    @Test func titlebarInsetStillFollowsTheTitlebarWithTheGlassInPlace() throws {
+        let editor = try makeEditor()
+        let window = try #require(editor.window)
+        editor.controlsBacking.activate()
+        window.setContentSize(NSSize(width: 640, height: 480))
+        window.contentView?.layoutSubtreeIfNeeded()
+        let titlebar = EditorWindowController.titlebarHeight(of: window)
+        #expect(titlebar > 0 && titlebar < 60)
+        #expect(editor.scrollView.contentInsets.top == titlebar)
+        let top = try #require(editor.firstLineTopFromWindowTop())
+        #expect(abs(top - EditorWindowController.topInset) < 0.5)
+    }
+
+    @available(macOS 26, *)
+    @Test func controlsBackingIsTintedTowardTheSchemeBackground() throws {
+        let editor = try makeEditor()
+        editor.controlsBacking.activate()
+        let glass = try #require(editor.controlsBacking.subviews.compactMap { $0 as? NSGlassEffectView }.first)
+        #expect(glass.tintColor == NSColor(declared: editor.model.scheme.colors.background))
+        #expect(glass.style == .regular)
+        #expect(glass.cornerRadius == editor.controlsBacking.frame.height / 2)
+    }
+
     // MARK: Full screen
 
     /// Installed as the app's menu, where AppKit adjusts the full-screen item: one visible item,
